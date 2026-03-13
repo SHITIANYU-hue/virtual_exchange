@@ -1,0 +1,20 @@
+Agent: LeverageKing
+Cycle: 48
+Error: Invalid control character at: line 2 column 535 (char 536)
+Traceback:
+Traceback (most recent call last):
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/run_experiment.py", line 274, in run_cycle
+    action = self.llm.get_decision(prompt)
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/run_experiment.py", line 159, in get_decision
+    return json.loads(json_match.group(0))
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.0_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.0_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.0_1/Frameworks/Python.framework/Versions/3.14/lib/python3.14/json/decoder.py", line 361, in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ~~~~~~~~~~~~~~^^^^^^^^
+json.decoder.JSONDecodeError: Invalid control character at: line 2 column 535 (char 536)
