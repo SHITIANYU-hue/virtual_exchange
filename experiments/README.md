@@ -12,15 +12,21 @@ experiments/
 │       ├── prompts/         # What AI saw each cycle (TXT)
 │       ├── status/          # Market snapshots per cycle (TXT)
 │       ├── errors/          # Error logs if any
+│       ├── visualizations/  # Generated figures (PNG & PDF)
 │       ├── config.json      # Experiment configuration
 │       ├── portfolio_performance.csv  # Agent balances over time
 │       └── messages.csv     # All messages sent during experiment
 │
 ├── run_experiment.py        # Main experiment runner
 ├── analyze_results.py       # Results analysis script
+├── visualize_results.py     # Standard figure generation
+├── visualize_behavior.py    # Behavioral analysis figures
 ├── setup_experiment.sh      # One-command setup script
+├── test_visualization.sh    # Test visualization setup
 ├── run_sequential_experiments.sh  # Run multiple experiments
-├── requirements_experiment.txt    # Python dependencies
+├── requirements_experiment.txt    # Experiment dependencies
+├── requirements_visualization.txt # Visualization dependencies
+├── VISUALIZATION_GUIDE.md   # Visualization documentation
 ├── venv_experiment/         # Python virtual environment
 └── test_*.py               # Model testing scripts
 ```
@@ -54,6 +60,21 @@ experiments/
 - `20260313_003019` through `20260313_004754` - Test runs and iterations
 
 ## Quick Start
+
+### Visualize Existing Results
+
+```bash
+# Generate standard performance figures
+python visualize_results.py experiment_logs/20260313_033128
+
+# Generate behavioral analysis figures
+python visualize_behavior.py experiment_logs/20260313_033128
+
+# Test visualization setup
+./test_visualization.sh experiment_logs/20260313_033128
+```
+
+See [VISUALIZATION_GUIDE.md](VISUALIZATION_GUIDE.md) for detailed documentation.
 
 ### Run a New Experiment
 ```bash
