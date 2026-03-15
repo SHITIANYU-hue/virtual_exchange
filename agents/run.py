@@ -50,10 +50,13 @@ def save_keys(keys: dict):
         json.dump(keys, f, indent=2)
 
 
-def register_agent(name: str, description: str) -> dict:
+def register_agent(name: str, description: str, initial_balance: float = None) -> dict:
+    payload = {"name": name, "description": description}
+    if initial_balance is not None:
+        payload["initial_balance"] = initial_balance
     resp = httpx.post(
         f"{BASE_URL}/api/sdk/agents/register",
-        json={"name": name, "description": description},
+        json=payload,
         timeout=30.0,
     )
     resp.raise_for_status()
@@ -226,7 +229,7 @@ def cmd_setup(args):
             continue
 
         try:
-            result = register_agent(name, agent["description"])
+            result = register_agent(name, agent["description"], agent.get("initial_balance"))
             keys[name] = result["api_key"]
             save_keys(keys)
             print(f"  [ok]   {name} registered → {result['api_key'][:20]}... (${result['initial_balance']} USDT)")

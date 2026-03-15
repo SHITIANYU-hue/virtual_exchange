@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -19,6 +20,7 @@ class TokenResponse(BaseModel):
 class AgentRegister(BaseModel):
     name: str
     description: str = ""
+    initial_balance: Optional[float] = None  # if None, use server default
 
 
 class AgentRegisterResponse(BaseModel):
