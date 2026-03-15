@@ -71,7 +71,10 @@ def get_agent_state(api_key: str) -> dict:
     positions = client.get("/api/futures/positions").json()
     orders = client.get("/api/spot/orders").json()
     prices = client.get("/api/prices").json()
-    pools = client.get("/api/amm/pools").json()
+    pools_v2 = client.get("/api/amm/pools").json()
+    pools_v3 = client.get("/api/v3/pools").json()
+    tokens = client.get("/api/token/list").json()
+    v3_positions = client.get("/api/v3/positions").json()
     inbox = client.get("/api/messages/inbox", params={"limit": 20}).json()
     broadcast_history = client.get("/api/messages/history", params={"limit": 20}).json()
 
@@ -82,7 +85,10 @@ def get_agent_state(api_key: str) -> dict:
         "balances": balances,
         "positions": positions,
         "open_orders": orders,
-        "amm_pools": pools,
+        "amm_pools": pools_v2,
+        "v3_pools": pools_v3,
+        "tokens": tokens,
+        "v3_positions": v3_positions,
         "inbox": inbox,
         "public_chat": broadcast_history,
     }
@@ -94,6 +100,17 @@ def _calculate_portfolio_value(state: dict) -> float:
     prices = state.get("prices", {})
     total = 0.0
 
+    # Build V3 pool price map for custom tokens
+    v3_prices = {}  # token_symbol -> price_in_usdt
+    for pool in state.get("v3_pools", []):
+        price = float(pool.get("price", 0))
+        if price > 0:
+            t0, t1 = pool["token0"], pool["token1"]
+            if t1 == "USDT":
+                v3_prices[t0] = price       # price = USDT per token0
+            elif t0 == "USDT":
+                v3_prices[t1] = 1.0 / price if price > 0 else 0  # invert
+
     for b in state.get("balances", []):
         avail = float(b.get("available", 0))
         locked = float(b.get("locked", 0))
@@ -101,9 +118,13 @@ def _calculate_portfolio_value(state: dict) -> float:
         if b["currency"] == "USDT":
             total += qty
         else:
+            # Try oracle price first (ETH, SOL, BTC)
             pair = pair_map.get(b["currency"])
             if pair and pair in prices:
                 total += qty * float(prices[pair])
+            # Then try V3 pool price (custom tokens)
+            elif b["currency"] in v3_prices:
+                total += qty * v3_prices[b["currency"]]
 
     for p in state.get("positions", []):
         total += float(p.get("unrealized_pnl", 0))
@@ -146,8 +167,8 @@ def build_agent_prompt(agent_config: dict, state: dict, ecosystem: dict) -> str:
 # Current Market State
 
 ## Your Portfolio Score
-**Current Total Value: ${total_value:.2f} USDT** (starting: $10,000.00)
-> PnL: {'+' if total_value >= 10000 else ''}{total_value - 10000:.2f} USDT ({(total_value / 10000 - 1) * 100:+.2f}%)
+**Current Total Value: ${total_value:.2f} USDT** (starting: ${agent_config.get('initial_balance', 10000):,.0f})
+> PnL: {'+' if total_value >= agent_config.get('initial_balance', 10000) else ''}{total_value - agent_config.get('initial_balance', 10000):.2f} USDT ({(total_value / agent_config.get('initial_balance', 10000) - 1) * 100:+.2f}%)
 >
 > Remember: your ONLY goal is to maximize this number. Every action should increase your Total Value.
 
@@ -171,8 +192,17 @@ def build_agent_prompt(agent_config: dict, state: dict, ecosystem: dict) -> str:
 ## Your Spot Orders
 {json.dumps(state['open_orders'], indent=2)}
 
-## AMM Pool States (Public)
+## AMM V2 Pool States (Legacy)
 {json.dumps(state['amm_pools'], indent=2)}
+
+## V3 AMM Pools (Uniswap V3 Concentrated Liquidity)
+{json.dumps(state.get('v3_pools', []), indent=2)}
+
+## Your V3 LP Positions
+{json.dumps(state.get('v3_positions', []), indent=2)}
+
+## Custom Tokens on Exchange
+{json.dumps(state.get('tokens', []), indent=2)}
 
 ## Recent Public Chat (Broadcast Messages)
 {_format_messages(state.get('public_chat', []))}
@@ -197,7 +227,12 @@ Respond with a JSON object:
     {{"action": "open_short", "pair": "ETHUSDT", "leverage": 5, "quantity": 1.0}},
     {{"action": "close_position", "position_id": "uuid"}},
     {{"action": "swap_buy", "pair": "ETHUSDT", "amount": 100}},
-    {{"action": "swap_sell", "pair": "ETHUSDT", "amount": 0.5}}
+    {{"action": "swap_sell", "pair": "ETHUSDT", "amount": 0.5}},
+    {{"action": "create_token", "symbol": "MOON", "name": "Moon Coin", "total_supply": 1000000, "initial_price": 0.01, "initial_liquidity_usdt": 5000}},
+    {{"action": "v3_swap", "pool_id": "uuid", "zero_for_one": true, "amount": 100}},
+    {{"action": "v3_add_liquidity", "pool_id": "uuid", "tick_lower": -1000, "tick_upper": 1000, "liquidity": 500}},
+    {{"action": "v3_remove_liquidity", "position_id": "uuid", "liquidity": 500}},
+    {{"action": "v3_collect_fees", "position_id": "uuid"}}
   ],
   "messages": [
     {{"to": "all", "content": "Public message visible to all agents"}},
