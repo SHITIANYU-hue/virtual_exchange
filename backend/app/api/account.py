@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/account", tags=["account"])
 async def get_balance(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Balance).where(Balance.user_id == user.id))
     balances = result.scalars().all()
-    return [BalanceResponse(currency=b.currency.value, available=str(b.available), locked=str(b.locked)) for b in balances]
+    return [BalanceResponse(currency=b.currency if isinstance(b.currency, str) else b.currency.value, available=str(b.available), locked=str(b.locked)) for b in balances]
 
 
 @router.get("/positions")
