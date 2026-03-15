@@ -74,9 +74,14 @@ def get_tick_at_sqrt_ratio(sqrt_ratio: Decimal) -> int:
 
     # Verify: the tick we return should satisfy
     # getSqrtRatioAtTick(tick) <= sqrt_ratio < getSqrtRatioAtTick(tick + 1)
+    # Check and adjust for floating point imprecision
     sqrt_at_tick = get_sqrt_ratio_at_tick(tick)
     if sqrt_at_tick > sqrt_ratio and tick > MIN_TICK:
         tick -= 1
+    elif tick < MAX_TICK:
+        sqrt_at_tick_plus1 = get_sqrt_ratio_at_tick(tick + 1)
+        if sqrt_at_tick_plus1 <= sqrt_ratio:
+            tick += 1
 
     return tick
 
