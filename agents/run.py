@@ -306,28 +306,39 @@ def _calculate_portfolio_value(state: dict) -> float:
     # Build V3 pool price map for custom tokens
     v3_prices = {}
     for pool in state.get("v3_pools", []):
+        # Handle both dict and string responses
+        if not isinstance(pool, dict):
+            continue
+
         price = float(pool.get("price", 0))
         if price > 0:
-            t0, t1 = pool["token0"], pool["token1"]
-            if t1 == "USDT":
+            t0, t1 = pool.get("token0", ""), pool.get("token1", "")
+            if t1 == "USDT" and t0:
                 v3_prices[t0] = price
-            elif t0 == "USDT":
+            elif t0 == "USDT" and t1:
                 v3_prices[t1] = 1.0 / price if price > 0 else 0
 
     for b in state.get("balances", []):
+        if not isinstance(b, dict):
+            continue
+
         avail = float(b.get("available", 0))
         locked = float(b.get("locked", 0))
         qty = avail + locked
-        if b["currency"] == "USDT":
+        currency = b.get("currency", "")
+
+        if currency == "USDT":
             total += qty
-        else:
-            pair = pair_map.get(b["currency"])
+        elif currency:
+            pair = pair_map.get(currency)
             if pair and pair in prices:
                 total += qty * float(prices[pair])
-            elif b["currency"] in v3_prices:
-                total += qty * v3_prices[b["currency"]]
+            elif currency in v3_prices:
+                total += qty * v3_prices[currency]
 
     for p in state.get("positions", []):
+        if not isinstance(p, dict):
+            continue
         total += float(p.get("unrealized_pnl", 0))
 
     return total
