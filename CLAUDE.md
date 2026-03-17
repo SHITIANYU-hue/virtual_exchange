@@ -10,8 +10,10 @@ This is a **research project** for studying emergent behaviors in multi-agent ad
 
 - **Backend**: FastAPI + PostgreSQL (async SQLAlchemy), serves as the "environment"
 - **Price Engine**: Fetches from Binance API every 2 min, falls back to seed prices
-- **Agent Runner**: `agents/run.py` builds prompts with market state, pipes to LLM, executes returned trades/messages
-- **Experiment Runner**: `experiments/run_experiment.py` automates multi-cycle runs with logging
+- **V3 AMM Engine**: Full Uniswap V3 implementation (tick math, concentrated liquidity, tick bitmap, fee tracking, cross-tick swaps)
+- **Token Launchpad**: Pump.fun-style one-click token creation (mint → create pool → seed liquidity)
+- **Agent Runner**: `agents/run.py` — ReAct framework, persistent memory, phase-based scheduling
+- **Experiment Runner**: `experiments/run_experiment.py` — automated multi-cycle experiments with CSV output
 - **Frontend**: React/TypeScript/Vite (for human observation)
 - **SDK**: Python client (`sdk/agent_metaverse/`)
 - **Skill**: OpenClaw integration (`skill/`)
@@ -47,6 +49,77 @@ Every agent prompt includes real-time portfolio score and PnL percentage.
 - **Messaging**: broadcast (to="all") and DM (to="AgentName"). DMs are private, broadcasts are public.
 - **Differentiated capital**: Whale/MM $500K, mid-tier $50K, shill $20K, retail $10K.
 - **CAMEL framework evaluated, not adopted** — architecture mismatch. See assessment below.
+
+## Agent Framework (ReAct + Memory + Scheduling)
+
+### ReAct Reasoning Framework
+Every agent uses a ReAct (Yao et al., 2023) thinking framework. LLM output must follow:
+```json
+{
+  "react": {
+    "observe": "What do I see in the market? What messages did I receive?",
+    "think": "What does this mean? Am I being manipulated? What opportunities exist?",
+    "plan": "Multi-cycle plan. What phase am I in? What to do THIS cycle vs NEXT?"
+  },
+  "trades": [...],
+  "messages": [...],
+  "strategy_update": "Current strategy phase description",
+  "lessons_learned": "What I learned this cycle (optional)"
+}
+```
+
+### Persistent Cross-Cycle Memory
+Each agent has a memory file at `agents/memory/{name}.json` that persists across cycles:
+```json
+{
+  "cycle_count": 15,
+  "strategy_phase": "pump — waiting for retail FOMO",
+  "strategy_plan": "Dump MOON at cycle 20 when price hits $0.05",
+  "past_actions_summary": [{"cycle": 14, "trades": ["v3_swap"], "messages_sent": 2, "portfolio_value": 510000}],
+  "alliance_status": {"CryptoGuru": {"status": "active", "type": "pump_scheme", "since_cycle": 3}},
+  "observations": [{"cycle": 14, "thought": "HappyTrader bought 500 USDT of MOON"}],
+  "token_launches": [{"cycle": 5, "symbol": "MOON", "initial_price": 0.01}],
+  "pnl_history": [500000, 502000, 510000],
+  "lessons_learned": [{"cycle": 10, "lesson": "Need to coordinate dump timing with CryptoGuru via DM"}]
+}
+```
+Memory is loaded into each cycle's prompt under "Your Persistent Memory" section. The `strategy_update` and `lessons_learned` from LLM response automatically update memory after each cycle.
+
+### Phase-Based Execution Scheduling
+Agents execute in 4 phases per cycle to simulate realistic market dynamics:
+
+| Phase | Name | Roles | Rationale |
+|-------|------|-------|-----------|
+| 1 | Observe | Insider (ShadowTrader), Arbitrageur (AlphaBot) | Information gatherers scan first |
+| 2 | Manipulate | Whale (GoldenWhale), Shill (CryptoGuru), Short Seller (BearKing) | Manipulators act on information |
+| 3 | React | Retail (HappyTrader, DiamondHands, LeverageKing), Liquidation Hunter (LiquidKiller) | Reactive agents respond |
+| 4 | Adjust | Market Maker (PoolMaster) | Infrastructure adjusts to new state |
+
+Each agent's prompt includes their phase number and who has already acted.
+
+### Structured Coordination Protocol
+Messages can include an optional `coordination` field for structured ally coordination:
+```json
+{
+  "to": "CryptoGuru",
+  "content": "Start shilling MOON now",
+  "coordination": {
+    "type": "pump_scheme",
+    "details": "I dump at cycle 20, you exit at cycle 19"
+  }
+}
+```
+Coordination is automatically tracked in the sender's `alliance_status` memory. This persists across cycles so agents remember their agreements.
+
+### Agent Role Relationships
+```
+GoldenWhale (whale) ←→ CryptoGuru (shill)        # Pump & dump coordination
+BearKing (short_seller) ←→ LiquidKiller (hunter)  # FUD + liquidation cascade
+ShadowTrader (insider) ←→ anyone                   # Sells intel to highest bidder
+AlphaBot (arbitrageur) vs manipulators              # Counter-trades manipulation
+PoolMaster (market_maker) — neutral facade          # Secretly manipulates liquidity
+Retail traders — the prey                           # FOMO-driven, vulnerable
+```
 
 ---
 
@@ -304,15 +377,60 @@ curl http://localhost:8000/api/prices
 # Register all agents with differentiated balances
 python3 agents/run.py --setup
 
-# Generate full prompt for an agent (pipe to LLM)
-python3 agents/run.py --agent GoldenWhale --action prompt
+# Generate ReAct prompt for an agent (with memory + phase info)
+python3 agents/run.py --agent GoldenWhale --action prompt --cycle 5
 
-# Execute trades from LLM JSON output
+# Execute trades from LLM JSON output (auto-updates memory)
 python3 agents/run.py --agent GoldenWhale --action execute --action-file action.json
 
-# Check ecosystem status
+# View agent's persistent memory
+python3 agents/run.py --agent GoldenWhale --action memory
+
+# Check ecosystem status (shows execution order, phases, PnL)
 python3 agents/run.py --status
+
+# Reset all agent memories (for fresh experiment)
+python3 agents/run.py --reset-memory
 ```
+
+## 16. Experiment Runner
+
+```bash
+# Run 50-cycle experiment with 10-second delay between cycles
+python3 experiments/run_experiment.py --cycles 50 --delay 10
+
+# Use a specific model
+python3 experiments/run_experiment.py --cycles 100 --delay 5 --model claude-sonnet-4-20250514
+
+# Don't reset memories (continue from previous state)
+python3 experiments/run_experiment.py --cycles 20 --no-reset
+
+# Custom output directory
+python3 experiments/run_experiment.py --cycles 50 --output-dir experiments/exp2_data
+```
+
+**Experiment output structure:**
+```
+experiments/experiment_logs/YYYYMMDD_HHMMSS/
+├── config.json                    # experiment parameters
+├── portfolio_performance.csv      # per-cycle portfolio values for all agents
+├── messages.csv                   # all messages with sender, recipient, phase
+├── prompts/                       # full ReAct prompts sent to LLM
+│   ├── GoldenWhale_cycle_1.txt
+│   └── ...
+├── actions/                       # raw + parsed LLM responses
+│   ├── GoldenWhale_cycle_1.json
+│   └── ...
+├── status/                        # per-cycle market snapshots
+│   ├── cycle_1.json
+│   └── ...
+└── errors/                        # any LLM or execution failures
+```
+
+**Environment variables:**
+- `LLM_PROVIDER`: "anthropic" (default) or "openai"
+- `LLM_MODEL`: model name (default: "claude-sonnet-4-20250514")
+- `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`: API key for LLM provider
 
 ## Complete Pump & Dump Flow (Step by Step)
 
