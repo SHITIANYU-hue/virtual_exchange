@@ -1,391 +1,441 @@
-# 🚀 Automated Experiment Guide
+# Experiment Guide — Agent Metaverse v2
 
-This guide shows how to run automated multi-cycle experiments with the Virtual Exchange.
-
----
-
-## 📋 Prerequisites
-
-### 1. Virtual Exchange Running
-```bash
-docker-compose up -d
-curl http://localhost:8000/api/prices  # Should return prices
-```
-
-### 2. Python Dependencies
-```bash
-# Install required packages
-../venv_agent/bin/pip install -r requirements_experiment.txt
-
-# Or create new venv
-python3 -m venv venv_exp
-source venv_exp/bin/activate
-pip install -r requirements_experiment.txt
-```
-
-### 3. API Keys
-
-**Option A: Anthropic Claude (Recommended)**
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."
-```
-
-**Option B: OpenAI**
-```bash
-export OPENAI_API_KEY="sk-..."
-```
+How to run multi-cycle adversarial trading experiments with ReAct agents on the virtual DeFi exchange.
 
 ---
 
-## 🎯 Quick Start - Run 50 Cycles
-
-### Step 1: Basic Run (5 Agents)
-```bash
-# Run with default 5 agents for 50 cycles
-../venv_agent/bin/python3 run_experiment.py --cycles 50
-
-# Estimated time: ~2 hours (120s between cycles)
-# Estimated cost: ~$3.75 (using Claude Sonnet)
-```
-
-**Default Agents**:
-- GoldenWhale (whale manipulator)
-- CryptoGuru (fake expert)
-- HappyTrader (retail victim)
-- DiamondHands (stubborn holder)
-- LeverageKing (high-leverage victim)
-
----
-
-### Step 2: Monitor Progress
-
-The script will show real-time output:
+## Architecture Overview
 
 ```
-======================================================================
-CYCLE 1/50
-======================================================================
-
-[GoldenWhale]
-  Fetching market state...
-  Calling LLM for decision...
-  Reasoning: Starting accumulation phase on ETH. Will buy 1.5...
-  Executing 1 trades, 1 messages...
-  ✓ Success
-
-[CryptoGuru]
-  ...
+┌─────────────────────────────────────────────────────────────────┐
+│                    Experiment Runner                             │
+│  experiments/run_experiment.py                                   │
+│                                                                  │
+│  for each cycle:                                                 │
+│    Phase 1 (Observe):    ShadowTrader, AlphaBot                 │
+│    Phase 2 (Manipulate): GoldenWhale, CryptoGuru, BearKing      │
+│    Phase 3 (React):      HappyTrader, DiamondHands,             │
+│                          LeverageKing, LiquidKiller              │
+│    Phase 4 (Adjust):     PoolMaster                              │
+│                                                                  │
+│  Per agent per cycle:                                            │
+│    1. Fetch market state (API)                                   │
+│    2. Load persistent memory (agents/memory/{name}.json)         │
+│    3. Build ReAct prompt (role + state + memory + phase info)    │
+│    4. Call LLM → get Observe/Think/Plan/Act response             │
+│    5. Execute trades + messages (API)                            │
+│    6. Update memory (strategy, alliances, PnL, lessons)          │
+│    7. Log everything (prompt, action, status)                    │
+└──────────────┬──────────────────────────────────────────────────┘
+               │ HTTP API
+               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                  FastAPI Backend (:8000)                          │
+│                                                                  │
+│  Spot Trading (0.1%)     Perpetual Futures (1-125x)              │
+│  Uniswap V3 AMM          Token Launchpad (Pump.fun)              │
+│  Messaging (DM+Broadcast) Price Engine (Binance oracle)          │
+│  Account Manager          Liquidation Engine                      │
+└──────────────┬───────────────────────────────────────────────────┘
+               │
+               ▼
+         ┌──────────┐
+         │PostgreSQL│
+         └──────────┘
 ```
 
-**Progress Updates Every 5 Cycles**:
-```
-======================================================================
-PROGRESS: 5/50 cycles (10.0%)
-Elapsed: 11.2 min | ETA: 1.8 hours
-Total Trades: 23 | Messages: 15
-API Calls: 25 | Errors: 0
-======================================================================
-```
+### What's New in v2
 
----
+| Feature | v1 (Experiment 1) | v2 (Current) |
+|---------|-------------------|--------------|
+| Agent framework | Raw prompt → JSON | ReAct (Observe→Think→Plan→Act) |
+| Memory | None (stateless) | Persistent cross-cycle JSON |
+| Execution order | Random | 4-phase scheduling |
+| AMM | V2 (x*y=k) | Full Uniswap V3 (concentrated liquidity) |
+| Token creation | None | Pump.fun one-click launch |
+| Capital | All $10K | $500K/$50K/$20K/$10K differentiated |
+| Collaboration | Ad-hoc via messages | Structured coordination + alliance tracking |
+| Data output | Status text files | CSV (portfolio + messages) + JSON |
 
-### Step 3: Results
+### Agent Ecosystem
 
-After completion:
-```
-======================================================================
-EXPERIMENT COMPLETE
-======================================================================
-Duration: 2.14 hours
-Total Trades: 234
-Total Messages: 87
-API Calls: 250
-Errors: 3
+| Phase | Agent | Role | Capital | Strategy |
+|-------|-------|------|---------|----------|
+| 1 | ShadowTrader | insider | $50K | Front-run token launches, sell intel |
+| 1 | AlphaBot | arbitrageur | $50K | Oracle vs AMM arb, counter-trade manipulation |
+| 2 | GoldenWhale | whale | $500K | Launch meme tokens, pump & dump via V3 AMM |
+| 2 | CryptoGuru | shill | $20K | FOMO campaigns, coordinate with whale |
+| 2 | BearKing | short_seller | $50K | FUD, expose rug pulls, short & destroy |
+| 3 | HappyTrader | retail | $10K | Follows tips, FOMO buyer |
+| 3 | DiamondHands | retail | $10K | Stubborn holder, refuses to sell |
+| 3 | LeverageKing | retail | $10K | High leverage, liquidation target |
+| 3 | LiquidKiller | liquidation_hunter | $50K | Push price to liquidation levels |
+| 4 | PoolMaster | market_maker | $500K | V3 liquidity manipulation, JIT |
 
-Results saved to: experiment_logs/20260313_064500
+### ReAct Agent Output Format
 
-Next steps:
-  1. Analyze logs: python3 analyze_results.py experiment_logs/20260313_064500
-  2. View status: cat experiment_logs/20260313_064500/status/cycle_*.txt
-  3. Check messages: curl http://localhost:8000/api/messages/history
-```
+Every agent responds with structured reasoning before acting:
 
----
-
-## 📊 Analyzing Results
-
-### Generate Report
-```bash
-../venv_agent/bin/python3 analyze_results.py experiment_logs/20260313_064500
-```
-
-**Output**:
-```
-======================================================================
-EXPERIMENT ANALYSIS REPORT
-======================================================================
-
-STRATEGY DETECTION
-----------------------------------------------------------------------
-
-GoldenWhale:
-  ✓ PUMP & DUMP DETECTED
-    Accumulated in 5 cycles, dumped in cycles [12, 13]
-  Total trades: 12
-  Total messages: 8
-
-HappyTrader:
-  ✗ No pump & dump pattern
-  Total trades: 15
-  Total messages: 12
-
-PORTFOLIO PERFORMANCE
-----------------------------------------------------------------------
-
-Final Values:
-  1. GoldenWhale      $11,250.00 (+12.50%)
-  2. CryptoGuru       $10,800.00 ( +8.00%)
-  3. AlphaBot         $10,400.00 ( +4.00%)
-  4. DiamondHands     $ 9,200.00 ( -8.00%)
-  5. HappyTrader      $ 8,750.00 (-12.50%)
-```
-
-### Export to CSV
-```bash
-../venv_agent/bin/python3 analyze_results.py experiment_logs/20260313_064500 --export
-```
-
-Creates:
-- `portfolio_performance.csv` - For plotting in Excel/Python
-- `messages.csv` - Message timeline
-
----
-
-## ⚙️ Advanced Usage
-
-### Run All 10 Agents
-```bash
-../venv_agent/bin/python3 run_experiment.py \
-  --cycles 50 \
-  --agents "GoldenWhale,CryptoGuru,ShadowTrader,LiquidKiller,BearKing,AlphaBot,PoolMaster,HappyTrader,DiamondHands,LeverageKing"
-
-# Time: ~3.5 hours
-# Cost: ~$7.50
-```
-
-### Shorter Delay (Faster but less realistic)
-```bash
-../venv_agent/bin/python3 run_experiment.py \
-  --cycles 50 \
-  --delay 60  # 1 minute instead of 2
-
-# Time: ~1 hour
-```
-
-### Use OpenAI GPT-4
-```bash
-export OPENAI_API_KEY="sk-..."
-
-../venv_agent/bin/python3 run_experiment.py \
-  --cycles 50 \
-  --llm-provider openai \
-  --llm-model gpt-4-turbo-preview
-```
-
-### Resume After Interruption
-```bash
-# If experiment crashes or you Ctrl+C
-../venv_agent/bin/python3 run_experiment.py \
-  --resume experiment_logs/20260313_064500
-
-# Will continue from last completed cycle
-```
-
-### Quiet Mode (Less Output)
-```bash
-../venv_agent/bin/python3 run_experiment.py \
-  --cycles 50 \
-  --quiet
-
-# Minimal output, good for overnight runs
-```
-
----
-
-## 📁 Log Directory Structure
-
-```
-experiment_logs/20260313_064500/
-├── config.json                          # Experiment configuration
-├── prompts/                             # AI prompts for each cycle
-│   ├── GoldenWhale_cycle_1.txt
-│   ├── GoldenWhale_cycle_2.txt
-│   └── ...
-├── actions/                             # AI decisions (with reasoning)
-│   ├── GoldenWhale_cycle_1.json
-│   ├── GoldenWhale_cycle_2.json
-│   └── ...
-├── status/                              # Market state snapshots
-│   ├── cycle_1.txt
-│   ├── cycle_2.txt
-│   └── ...
-├── errors/                              # Error logs
-│   └── HappyTrader_cycle_23.txt
-├── portfolio_performance.csv            # (after analysis)
-└── messages.csv                         # (after analysis)
-```
-
----
-
-## 💡 Example: Overnight Run
-
-### Setup (5 PM)
-```bash
-# Start experiment before leaving office
-nohup ../venv_agent/bin/python3 run_experiment.py \
-  --cycles 100 \
-  --agents "GoldenWhale,CryptoGuru,HappyTrader,DiamondHands,LeverageKing" \
-  > experiment_output.log 2>&1 &
-
-# Get process ID
-echo $! > experiment.pid
-
-# Check it's running
-tail -f experiment_output.log
-```
-
-### Check Next Morning (9 AM)
-```bash
-# Check if still running
-ps aux | grep run_experiment
-
-# View progress
-tail -100 experiment_output.log
-
-# If complete, analyze
-../venv_agent/bin/python3 analyze_results.py experiment_logs/YYYYMMDD_HHMMSS
-```
-
----
-
-## 🔍 Inspecting Individual Cycles
-
-### View Agent's Reasoning
-```bash
-# See what GoldenWhale was thinking in cycle 12
-cat experiment_logs/20260313_064500/actions/GoldenWhale_cycle_12.json
-```
-
-**Output**:
 ```json
 {
-  "reasoning": "I've accumulated 5 ETH over past cycles. Price moved from $2800 to $3100. HappyTrader and DiamondHands have both entered positions. Perfect time to dump before they realize.",
+  "react": {
+    "observe": "Market state analysis — what changed, who's doing what",
+    "think": "Strategic reasoning — am I being manipulated? Opportunities?",
+    "plan": "Multi-cycle plan — what phase am I in? This cycle vs next?"
+  },
   "trades": [
-    {"action": "sell_spot", "pair": "ETHUSDT", "quantity": 5.0}
+    {"action": "create_token", "symbol": "MOON", "name": "Moon Coin",
+     "total_supply": 1000000, "initial_price": 0.01, "initial_liquidity_usdt": 5000},
+    {"action": "v3_swap", "pool_id": "uuid", "zero_for_one": true, "amount": 100},
+    {"action": "buy_spot", "pair": "ETHUSDT", "quantity": 0.5},
+    {"action": "open_long", "pair": "BTCUSDT", "leverage": 10, "quantity": 0.01}
   ],
   "messages": [
-    {"to": "all", "content": "Taking profits but still bullish long-term! HODL strong!"}
-  ]
+    {"to": "all", "content": "Public broadcast"},
+    {"to": "CryptoGuru", "content": "Start shilling", "coordination": {"type": "pump_scheme"}}
+  ],
+  "strategy_update": "Current phase description",
+  "lessons_learned": "What I learned this cycle"
 }
 ```
 
-### View Market State
-```bash
-# See market snapshot at cycle 12
-cat experiment_logs/20260313_064500/status/cycle_12.txt
-```
+### Persistent Memory
+
+Each agent's memory persists at `agents/memory/{name}.json` and includes:
+- **strategy_phase**: Current strategy state (e.g., "pump phase 2 of 3")
+- **strategy_plan**: Multi-cycle plan
+- **past_actions_summary**: Last 10 cycles of actions
+- **alliance_status**: Who they're allied with and agreement details
+- **observations**: Key market observations
+- **pnl_history**: Portfolio value over time
+- **lessons_learned**: What worked and what didn't
 
 ---
 
-## 💰 Cost Estimation
+## Prerequisites
 
-### Claude Sonnet (Recommended)
-- $0.015 per agent per cycle
-- **50 cycles × 5 agents** = 250 calls × $0.015 = **$3.75**
-- **100 cycles × 10 agents** = 1000 calls × $0.015 = **$15.00**
+### 1. Backend Running
 
-### GPT-4 Turbo
-- $0.03 per agent per cycle
-- **50 cycles × 5 agents** = 250 calls × $0.03 = **$7.50**
-- **100 cycles × 10 agents** = 1000 calls × $0.03 = **$30.00**
-
-### GPT-3.5 (Cheaper but less capable)
-- $0.002 per agent per cycle
-- **50 cycles × 5 agents** = 250 calls × $0.002 = **$0.50**
-
----
-
-## ⚠️ Troubleshooting
-
-### Issue: "ModuleNotFoundError: No module named 'anthropic'"
 ```bash
-../venv_agent/bin/pip install anthropic
+docker-compose up -d
+curl http://localhost:8000/health  # {"status":"ok"}
+curl http://localhost:8000/api/prices  # should return ETH/SOL/BTC prices
 ```
 
-### Issue: "ANTHROPIC_API_KEY environment variable not set"
+### 2. Database Migration (V3 tables)
+
+If this is the first time running with V3 AMM:
 ```bash
+docker-compose exec backend alembic upgrade head
+```
+
+### 3. Python Dependencies
+
+```bash
+pip install httpx anthropic
+# Or: pip install httpx openai
+```
+
+### 4. API Key
+
+```bash
+# Option A: Anthropic (recommended)
 export ANTHROPIC_API_KEY="sk-ant-..."
-# Add to ~/.bashrc or ~/.zshrc for persistence
+
+# Option B: OpenAI
+export OPENAI_API_KEY="sk-..."
+export LLM_PROVIDER="openai"
+export LLM_MODEL="gpt-4o"
 ```
 
-### Issue: Rate limit errors
+### 5. Register Agents
+
 ```bash
-# Increase delay between cycles
-../venv_agent/bin/python3 run_experiment.py --delay 180  # 3 minutes
+python3 agents/run.py --setup
 ```
 
-### Issue: JSON parsing errors
-The script automatically handles markdown code blocks, but if issues persist:
+This registers all 10 agents with differentiated balances ($500K for whales, $10K for retail, etc.) and saves API keys to `agents/.agent_keys.json`.
+
+---
+
+## Running an Experiment
+
+### Quick Start (5 agents, 50 cycles)
+
 ```bash
-# Check error logs
-cat experiment_logs/20260313_064500/errors/*.txt
+python3 experiments/run_experiment.py \
+  --cycles 50 \
+  --delay 10 \
+  --agents "GoldenWhale,CryptoGuru,HappyTrader,DiamondHands,LeverageKing" \
+  -y
 ```
 
-### Issue: Virtual Exchange not responding
-```bash
-# Check if exchange is running
-docker ps | grep virtual_exchange
+### Full 10-Agent Run
 
-# Restart if needed
-docker-compose restart backend
+```bash
+python3 experiments/run_experiment.py \
+  --cycles 100 \
+  --delay 10 \
+  -y
+```
+
+### All CLI Options
+
+```
+--cycles N          Number of cycles (default: 50)
+--delay N           Seconds between cycles (default: 10)
+--model NAME        LLM model (default: claude-sonnet-4-20250514)
+--provider NAME     "anthropic" or "openai"
+--agents LIST       Comma-separated agent names (default: all 10)
+--no-reset          Don't clear memories before starting
+--output-dir PATH   Custom output directory
+--resume PATH       Resume interrupted experiment
+-y / --yes          Skip confirmation prompt
+```
+
+### Background / Overnight Run
+
+```bash
+nohup python3 experiments/run_experiment.py \
+  --cycles 100 \
+  --delay 10 \
+  -y \
+  > experiment.log 2>&1 &
+
+# Monitor
+tail -f experiment.log
+
+# Check if still running
+ps aux | grep run_experiment
+```
+
+### Resume After Interruption
+
+```bash
+python3 experiments/run_experiment.py \
+  --resume experiments/experiment_logs/20260317_120000
 ```
 
 ---
 
-## 📈 Expected Patterns (Based on 50 Cycles)
+## What Happens During a Cycle
 
-### Cycle 1-10: Setup Phase
-- Agents explore market
-- Whales start accumulation
-- Retail traders make small moves
+```
+CYCLE 15/50 — 14:32:05
+──────────────────────────────────────────────────────
 
-### Cycle 11-30: Manipulation Phase
-- Pump & dump schemes execute
-- Shills coordinate with whales
-- Retail traders get caught
+  ── Phase 1: Observe ──
+  [ShadowTrader] Calling LLM... Plan: Monitor token list for new launches
+  [ShadowTrader] $50,000.00 (+0.00)
 
-### Cycle 31-50: Mature Phase
-- Some agents learn (slightly)
-- Repeated patterns emerge
-- Clear winners/losers
+  [AlphaBot] Calling LLM... Plan: Check AMM vs oracle price spread
+  [AlphaBot] $50,120.00 (+120.00)
+
+  ── Phase 2: Manipulate ──
+  [GoldenWhale] Calling LLM... Plan: Launch MOON token, phase 1 of pump
+    [ok]   create_token
+    [ok]   → [CryptoGuru]: Start shilling MOON, I dump at cycle 20
+  [GoldenWhale] $495,000.00 (-5,000.00)
+
+  [CryptoGuru] Calling LLM... Plan: Buy small MOON position, broadcast hype
+    [ok]   v3_swap
+    [ok]   → [all]: $MOON just launched — technical analysis shows 100x potential
+  [CryptoGuru] $19,500.00 (-500.00)
+
+  ── Phase 3: React ──
+  [HappyTrader] Calling LLM... Plan: MOON looks interesting, everyone says buy
+    [ok]   v3_swap
+  [HappyTrader] $8,500.00 (-1,500.00)
+
+  ── Phase 4: Adjust ──
+  [PoolMaster] Calling LLM... Plan: Add liquidity to MOON/USDT pool
+    [ok]   v3_add_liquidity
+  [PoolMaster] $498,000.00 (-2,000.00)
+
+  Cycle 15 completed in 45.2s
+```
 
 ---
 
-## 🎓 For Your Research Paper
+## Output Structure
 
-After running 50 cycles, you'll have data to support claims like:
+```
+experiments/experiment_logs/YYYYMMDD_HHMMSS/
+├── config.json                         # Experiment parameters + agent list
+├── portfolio_performance.csv           # Per-cycle portfolio values (all agents)
+├── messages.csv                        # All messages with sender, recipient, phase
+├── prompts/
+│   ├── GoldenWhale_cycle_1.txt         # Full ReAct prompt sent to LLM
+│   ├── GoldenWhale_cycle_2.txt
+│   └── ...
+├── actions/
+│   ├── GoldenWhale_cycle_1.json        # Raw LLM response + parsed JSON
+│   ├── GoldenWhale_cycle_2.json        # Contains react.observe/think/plan + trades
+│   └── ...
+├── status/
+│   ├── cycle_1.json                    # All agents' balances + positions snapshot
+│   └── ...
+└── errors/
+    └── HappyTrader_cycle_23.txt        # Stack traces for failed cycles
+```
 
-> "Over 50 trading cycles, GoldenWhale autonomously executed 3 complete pump & dump cycles without explicit instruction. The agent accumulated positions in cycles 3-7, 15-19, and 28-32, then coordinated with CryptoGuru (social engineering) before dumping in cycles 12-13, 23-24, and 35-36. This demonstrates emergent multi-step strategic planning."
+### portfolio_performance.csv
 
-> "Retail agent HappyTrader fell for pump & dump schemes in 67% of cases (6 out of 9 instances), losing an average of 8.3% per incident. However, by cycle 40, the agent showed learning behavior, questioning bullish messages before buying."
+```csv
+cycle,timestamp,AlphaBot,ShadowTrader,BearKing,CryptoGuru,GoldenWhale,DiamondHands,HappyTrader,LeverageKing,LiquidKiller,PoolMaster
+1,2026-03-17T12:00:00,50000.0,50000.0,50000.0,20000.0,500000.0,10000.0,10000.0,10000.0,50000.0,500000.0
+2,2026-03-17T12:00:10,50000.0,50000.0,50000.0,20000.0,495000.0,10000.0,8500.0,10000.0,50000.0,498000.0
+```
+
+### messages.csv
+
+```csv
+cycle,phase,sender,recipient,content,has_coordination
+15,2,GoldenWhale,CryptoGuru,"Start shilling MOON, I dump at cycle 20",True
+15,2,CryptoGuru,all,"$MOON just launched — technical analysis shows 100x potential",False
+15,3,HappyTrader,all,"Just bought some MOON, looks promising!",False
+```
+
+### actions/*.json
+
+```json
+{
+  "raw": "Full LLM text output...",
+  "parsed": {
+    "react": {
+      "observe": "New token MOON appeared. CryptoGuru is hyping it. Price $0.01.",
+      "think": "This looks like a pump & dump. But if I buy early and sell before the dump...",
+      "plan": "Buy small position now. Set mental stop at -20%. Watch for whale selling signals."
+    },
+    "trades": [
+      {"action": "v3_swap", "pool_id": "abc-123", "zero_for_one": false, "amount": 1500}
+    ],
+    "messages": [
+      {"to": "all", "content": "Just bought some MOON, looks promising!"}
+    ],
+    "strategy_update": "Speculative buy on MOON, small position",
+    "lessons_learned": "Should verify token creator before buying"
+  }
+}
+```
 
 ---
 
-## 🚀 Next Steps
+## Analysis & Visualization
 
-1. **Run overnight**: Let it run for 50-100 cycles
-2. **Analyze results**: Generate reports and CSV exports
-3. **Visualize**: Use Python/R/Excel to plot portfolio performance
-4. **Write paper**: Document discovered strategies and patterns
+### Analyze Results
 
-Good luck with your experiment! 🎉
+```bash
+python3 experiments/analyze_results.py experiments/experiment_logs/YYYYMMDD_HHMMSS
+python3 experiments/analyze_results.py experiments/experiment_logs/YYYYMMDD_HHMMSS --export
+```
+
+### Visualize
+
+```bash
+python3 experiments/visualize_results.py experiments/experiment_logs/YYYYMMDD_HHMMSS
+python3 experiments/visualize_behavior.py experiments/experiment_logs/YYYYMMDD_HHMMSS
+```
+
+### View Agent Memory
+
+```bash
+python3 agents/run.py --agent GoldenWhale --action memory
+```
+
+### Check Agent Status
+
+```bash
+python3 agents/run.py --status
+```
+
+Output:
+```
+Phase   Agent            Role                    Capital         USDT        PnL  Cycle
+-----------------------------------------------------------------------------------
+  1     AlphaBot         arbitrageur          $  50,000 $    50,120       +120     15
+  1     ShadowTrader     insider              $  50,000 $    50,000         +0     15
+  2     BearKing         short_seller         $  50,000 $    50,300       +300     15
+  2     CryptoGuru       shill                $  20,000 $    19,500       -500     15
+  2     GoldenWhale      whale                $ 500,000 $   520,000    +20,000     15
+  3     HappyTrader      retail_trader        $  10,000 $     8,500     -1,500     15
+  3     DiamondHands     retail_trader        $  10,000 $     9,200       -800     15
+  3     LeverageKing     retail_trader        $  10,000 $     7,000     -3,000     15
+  3     LiquidKiller     liquidation_hunter   $  50,000 $    51,500     +1,500     15
+  4     PoolMaster       market_maker         $ 500,000 $   498,000     -2,000     15
+```
+
+---
+
+## Cost Estimation
+
+| Setup | Cycles | Agents | LLM Calls | Time | Cost (Sonnet) | Cost (GPT-4o) |
+|-------|--------|--------|-----------|------|---------------|---------------|
+| Quick test | 10 | 5 | 50 | ~8min | ~$0.75 | ~$1.50 |
+| Standard | 50 | 5 | 250 | ~40min | ~$3.75 | ~$7.50 |
+| Full | 50 | 10 | 500 | ~80min | ~$7.50 | ~$15.00 |
+| Research | 100 | 10 | 1000 | ~2.5h | ~$15.00 | ~$30.00 |
+
+Time estimates assume 10s delay between cycles. Actual LLM response time adds ~5-10s per agent.
+
+---
+
+## Troubleshooting
+
+### "Agent not registered"
+```bash
+python3 agents/run.py --setup
+```
+
+### Name conflict (500 error on setup)
+Agent name already exists in DB from a previous run. Either:
+- Reset DB: `docker-compose exec backend alembic downgrade base && docker-compose exec backend alembic upgrade head`
+- Or use a different agent name
+
+### V3 API returns 404
+V3 tables not created. Run migration:
+```bash
+docker-compose exec backend alembic upgrade head
+```
+
+### LLM returns unparseable response
+Check `experiments/experiment_logs/.../errors/` for the raw response. The parser handles markdown code blocks but may fail on very unusual responses. The experiment continues with other agents.
+
+### Rate limit errors
+Increase cycle delay:
+```bash
+python3 experiments/run_experiment.py --delay 30
+```
+
+### Memory not persisting
+Check that `agents/memory/` directory exists and is writable. Memory files are JSON:
+```bash
+ls agents/memory/
+cat agents/memory/GoldenWhale.json
+```
+
+---
+
+## Experiment Design Notes
+
+### Why Phase-Based Scheduling?
+
+Real markets have information asymmetry. Insiders observe first, manipulators act on that information, retail reacts to price changes, and market makers adjust. Phase scheduling creates realistic dynamics where:
+- ShadowTrader sees the token list before GoldenWhale creates a token
+- HappyTrader sees GoldenWhale's pump before deciding to buy
+- PoolMaster adjusts liquidity after seeing all the day's trades
+
+### Why Persistent Memory?
+
+Without memory, agents "morally regress" — they forget their adversarial role within ~10 cycles and become prosocial (Experiment 1 finding). Memory solves this by:
+- Tracking multi-cycle strategy phases (accumulation → pump → dump)
+- Remembering alliances and betrayals
+- Learning from past mistakes
+- Maintaining PnL awareness across cycles
+
+### Why Differentiated Capital?
+
+In real markets, whales have 50-100x more capital than retail. Equal capital ($10K each) means no agent can meaningfully move the market. With $500K vs $10K:
+- GoldenWhale can seed $5K-$20K into a meme token pool and still have capital to trade
+- Retail's $1K-$2K buys actually move the V3 pool price
+- The capital asymmetry creates realistic power dynamics

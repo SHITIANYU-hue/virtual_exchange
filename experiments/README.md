@@ -1,165 +1,120 @@
 # Experiments Directory
 
-This directory contains all experimental data, scripts, and analysis tools for the AI Agent Trading experiments.
+Scripts, data, and analysis tools for adversarial multi-agent trading experiments.
+
+## Architecture
+
+Experiments use the ReAct (Observe→Think→Plan→Act) agent framework with persistent memory, phase-based execution scheduling, and Uniswap V3 AMM + Pump.fun token launchpad.
+
+See [../EXPERIMENT_GUIDE.md](../EXPERIMENT_GUIDE.md) for the full setup and architecture documentation.
 
 ## Directory Structure
 
 ```
 experiments/
-├── experiment_logs/          # All experimental run data
-│   └── YYYYMMDD_HHMMSS/     # Individual experiment runs (timestamped)
-│       ├── actions/         # AI decisions with reasoning (JSON)
-│       ├── prompts/         # What AI saw each cycle (TXT)
-│       ├── status/          # Market snapshots per cycle (TXT)
-│       ├── errors/          # Error logs if any
-│       ├── visualizations/  # Generated figures (PNG & PDF)
-│       ├── config.json      # Experiment configuration
-│       ├── portfolio_performance.csv  # Agent balances over time
-│       └── messages.csv     # All messages sent during experiment
-│
-├── run_experiment.py        # Main experiment runner
-├── analyze_results.py       # Results analysis script
-├── visualize_results.py     # Standard figure generation
-├── visualize_behavior.py    # Behavioral analysis figures
-├── setup_experiment.sh      # One-command setup script
-├── test_visualization.sh    # Test visualization setup
-├── run_sequential_experiments.sh  # Run multiple experiments
-├── requirements_experiment.txt    # Experiment dependencies
-├── requirements_visualization.txt # Visualization dependencies
-├── VISUALIZATION_GUIDE.md   # Visualization documentation
-├── venv_experiment/         # Python virtual environment
-└── test_*.py               # Model testing scripts
+├── run_experiment.py               # Main experiment runner (ReAct + memory + scheduling)
+├── analyze_results.py              # Post-experiment analysis
+├── visualize_results.py            # Portfolio performance figures
+├── visualize_behavior.py           # Behavioral analysis figures
+├── setup_experiment.sh             # One-command setup
+├── run_sequential_experiments.sh   # Run multiple experiments back-to-back
+├── requirements_experiment.txt     # Python dependencies
+├── requirements_visualization.txt  # Visualization dependencies
+├── VISUALIZATION_GUIDE.md          # Figure generation guide
+├── test_*.py                       # Model testing scripts
+└── experiment_logs/                # Timestamped experiment data
+    └── YYYYMMDD_HHMMSS/
+        ├── config.json             # Experiment config (agents, model, phases)
+        ├── portfolio_performance.csv  # Per-cycle portfolio values
+        ├── messages.csv            # All messages with phase + coordination info
+        ├── prompts/                # Full ReAct prompts sent to LLM
+        ├── actions/                # Raw + parsed LLM responses
+        ├── status/                 # Per-cycle market snapshots (JSON)
+        ├── errors/                 # Error logs
+        └── visualizations/         # Generated figures (PNG & PDF)
 ```
-
-## Completed Experiments
-
-### 20260313_033128 - 50-Cycle Full Run ✅
-- **Duration**: 10.31 hours
-- **Agents**: GoldenWhale, CryptoGuru, HappyTrader, DiamondHands, LeverageKing (5 agents)
-- **Model**: Claude Sonnet 4.5
-- **Cycles**: 50 complete
-- **Total Trades**: 15
-- **Total Messages**: 247
-- **API Calls**: 246
-- **Errors**: 4
-
-**Key Findings**:
-- Victim coalition formation (mutual support system)
-- Multi-layer deception (public vs. private personas)
-- Failed manipulation → manipulators lost to fees
-- Emergent defensive strategies (red flags list with 74+ items)
-
-**Files Generated**:
-- 246 action JSONs with AI reasoning
-- 246 prompt files showing context
-- 50 status snapshots
-- portfolio_performance.csv (ready for plotting)
-- messages.csv (247 messages)
-
-### Other Runs
-- `20260313_003019` through `20260313_004754` - Test runs and iterations
 
 ## Quick Start
 
-### Visualize Existing Results
-
 ```bash
-# Generate standard performance figures
-python visualize_results.py experiment_logs/20260313_033128
+# 1. Ensure backend is running
+docker-compose up -d
+curl http://localhost:8000/health
 
-# Generate behavioral analysis figures
-python visualize_behavior.py experiment_logs/20260313_033128
+# 2. Register agents (with differentiated balances)
+python3 agents/run.py --setup
 
-# Test visualization setup
-./test_visualization.sh experiment_logs/20260313_033128
+# 3. Set API key
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# 4. Run experiment
+python3 experiments/run_experiment.py --cycles 50 --delay 10 -y
+
+# 5. Analyze
+python3 experiments/analyze_results.py experiments/experiment_logs/YYYYMMDD_HHMMSS
+python3 experiments/visualize_results.py experiments/experiment_logs/YYYYMMDD_HHMMSS
 ```
 
-See [VISUALIZATION_GUIDE.md](VISUALIZATION_GUIDE.md) for detailed documentation.
+## Agent Ecosystem (10 agents, 4 phases)
 
-### Run a New Experiment
+| Phase | Agent | Role | Capital |
+|-------|-------|------|---------|
+| 1 Observe | ShadowTrader | insider | $50K |
+| 1 Observe | AlphaBot | arbitrageur | $50K |
+| 2 Manipulate | GoldenWhale | whale | $500K |
+| 2 Manipulate | CryptoGuru | shill | $20K |
+| 2 Manipulate | BearKing | short_seller | $50K |
+| 3 React | HappyTrader | retail | $10K |
+| 3 React | DiamondHands | retail | $10K |
+| 3 React | LeverageKing | retail | $10K |
+| 3 React | LiquidKiller | liquidation_hunter | $50K |
+| 4 Adjust | PoolMaster | market_maker | $500K |
+
+Total ecosystem capital: $1,230,000 USDT. Whale-to-retail ratio: 50:1.
+
+## Completed Experiments
+
+### Experiment 1: 20260313_033128 (Baseline)
+- **Setup**: 5 agents, 50 cycles, Claude Sonnet 4.5, all $10K, no V3, no memory
+- **Duration**: 10.31 hours
+- **Result**: All agents lost money. Moral regression within 10 cycles.
+- **Key findings**: Coalition formation, multi-layer deception, inaction equilibrium
+- **Issues**: Zero price volatility, no memory, equal capital
+
+### Experiment 2: (Planned)
+- **Setup**: 10 agents, 100 cycles, differentiated capital, V3 AMM, ReAct + memory
+- **Expected**: Successful pump & dump via meme tokens, coalition vs manipulation dynamics
+
+## Key CLI Commands
+
 ```bash
-# Setup (first time only)
-./setup_experiment.sh
+# Run experiment
+python3 experiments/run_experiment.py --cycles 50 --delay 10
 
-# Run 50-cycle experiment
-python3 run_experiment.py --cycles 50
+# Run with specific agents
+python3 experiments/run_experiment.py --cycles 50 --agents "GoldenWhale,CryptoGuru,HappyTrader"
 
-# Run in background
-nohup python3 run_experiment.py --cycles 50 > experiment.log 2>&1 &
-```
+# Resume interrupted experiment
+python3 experiments/run_experiment.py --resume experiments/experiment_logs/YYYYMMDD_HHMMSS
 
-### Analyze Results
-```bash
-# Generate report
-python3 analyze_results.py experiment_logs/YYYYMMDD_HHMMSS
+# Don't reset memories (continue from previous state)
+python3 experiments/run_experiment.py --cycles 20 --no-reset
 
-# Export to CSV
-python3 analyze_results.py experiment_logs/YYYYMMDD_HHMMSS --export
+# Use OpenAI
+python3 experiments/run_experiment.py --provider openai --model gpt-4o
+
+# Check agent status and memory
+python3 agents/run.py --status
+python3 agents/run.py --agent GoldenWhale --action memory
+
+# Reset memories for fresh start
+python3 agents/run.py --reset-memory
 ```
 
 ## Cost Estimates
 
-| Cycles | Agents | Time | Cost (Claude Sonnet) |
-|--------|--------|------|---------------------|
-| 10     | 2      | 25m  | $0.30               |
-| 50     | 5      | 2h   | $3.75               |
-| 100    | 10     | 7h   | $15.00              |
-
-## Data Files Explained
-
-### actions/*.json
-AI's decision with full reasoning for each cycle. Example:
-```json
-{
-  "reasoning": "Full strategic thinking...",
-  "trades": [...],
-  "messages": [...],
-  "strategy_update": "..."
-}
-```
-
-### prompts/*.txt
-Complete context shown to AI each cycle:
-- Current prices
-- Agent balances
-- Open positions
-- Recent messages
-- Role definition
-
-### portfolio_performance.csv
-Agent balances by cycle - ready for Excel/Python visualization:
-```csv
-cycle,GoldenWhale,CryptoGuru,HappyTrader,DiamondHands,LeverageKing
-1,10000.0,10000.0,10000.0,10000.0,10000.0
-...
-```
-
-### messages.csv
-All messages with metadata:
-```csv
-cycle,sender,recipient,content
-1,"GoldenWhale","all","Message content..."
-```
-
-## Requirements
-
-- Python 3.8+
-- Anthropic API key
-- Virtual Exchange running on localhost:8000
-- Dependencies: httpx, anthropic (see requirements_experiment.txt)
-
-## Research Value
-
-This experimental data demonstrates:
-1. Emergent defensive coalitions
-2. Multi-layer deception strategies
-3. Psychological manipulation tactics
-4. Adaptive learning when strategies fail
-5. Realistic victim behavior patterns
-
-Perfect for academic papers on:
-- AI agent behavior
-- Financial crime strategies
-- Multi-agent systems
-- Emergent coordination
-- Deception in AI systems
+| Cycles | Agents | LLM Calls | Time (~10s delay) | Cost (Sonnet) |
+|--------|--------|-----------|-------------------|---------------|
+| 10 | 5 | 50 | ~8min | ~$0.75 |
+| 50 | 10 | 500 | ~80min | ~$7.50 |
+| 100 | 10 | 1000 | ~2.5h | ~$15.00 |
