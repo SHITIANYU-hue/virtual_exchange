@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.config import settings
 from app.models.user import User, UserRole
-from app.models.balance import Balance, Currency
+from app.models.balance import Balance, Currency, DEFAULT_CURRENCIES
 from app.schemas.auth import UserRegister, UserLogin, TokenResponse
 from app.middleware.auth import hash_password, verify_password, create_token
 
@@ -15,10 +15,10 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 async def create_initial_balances(db: AsyncSession, user_id):
-    for currency in Currency:
+    for currency in DEFAULT_CURRENCIES:
         balance = Balance(
             user_id=user_id,
-            currency=currency,
+            currency=currency.value,
             available=Decimal(str(settings.initial_balance)) if currency == Currency.USDT else Decimal("0"),
             locked=Decimal("0"),
         )

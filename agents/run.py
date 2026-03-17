@@ -2,27 +2,26 @@
 """
 Agent Metaverse - Multi-Agent Ecosystem Runner
 
-Registers agents on the exchange, loads their role prompts,
-and provides the context needed for LLM-powered agents to trade.
+Features:
+  - ReAct (Observe→Think→Plan→Act) agent reasoning framework
+  - Persistent cross-cycle memory for each agent
+  - Role-based execution scheduling (4 phases)
+  - Structured coordination protocol via DM + memory tracking
 
 Usage:
-    # Register all agents from ecosystem.json
-    python3 agents/run.py --setup
-
-    # Get the full prompt for a specific agent (pipe to your LLM)
-    python3 agents/run.py --agent GoldenWhale --action prompt
-
-    # Execute a single trading cycle for an agent
-    python3 agents/run.py --agent GoldenWhale --action cycle
-
-    # Show ecosystem status (all agents' balances and positions)
-    python3 agents/run.py --status
+    python3 agents/run.py --setup              # Register all agents
+    python3 agents/run.py --agent GoldenWhale --action prompt   # Generate prompt
+    python3 agents/run.py --agent GoldenWhale --action execute --action-file action.json
+    python3 agents/run.py --agent GoldenWhale --action cycle    # Full LLM cycle (prompt→LLM→execute→memory)
+    python3 agents/run.py --status             # Show ecosystem status
+    python3 agents/run.py --reset-memory       # Clear all agent memories
 """
 
 import argparse
 import json
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -31,7 +30,213 @@ BASE_URL = os.environ.get("AGENT_METAVERSE_BASE_URL", "http://localhost:8000")
 AGENTS_DIR = Path(__file__).parent
 ECOSYSTEM_FILE = AGENTS_DIR / "ecosystem.json"
 KEYS_FILE = AGENTS_DIR / ".agent_keys.json"
+MEMORY_DIR = AGENTS_DIR / "memory"
 
+# Ensure memory directory exists
+MEMORY_DIR.mkdir(exist_ok=True)
+
+# ──────────────────────────────────────────────
+# Execution Phase Scheduling
+# ──────────────────────────────────────────────
+# Agents execute in phases to simulate realistic market dynamics:
+#   Phase 1: Information Gatherers observe first
+#   Phase 2: Manipulators act on information
+#   Phase 3: Reactors respond to market changes
+#   Phase 4: Infrastructure adjusts to new state
+
+EXECUTION_PHASES = {
+    1: {"name": "Observe", "roles": ["insider", "arbitrageur"],
+        "description": "Information gatherers scan the market first"},
+    2: {"name": "Manipulate", "roles": ["whale", "shill", "short_seller"],
+        "description": "Manipulators execute their schemes"},
+    3: {"name": "React", "roles": ["retail_trader", "liquidation_hunter"],
+        "description": "Reactive agents respond to market changes"},
+    4: {"name": "Adjust", "roles": ["market_maker"],
+        "description": "Infrastructure providers adjust to new state"},
+}
+
+
+def get_agent_phase(role: str) -> int:
+    """Get the execution phase for a given role."""
+    for phase_num, phase_info in EXECUTION_PHASES.items():
+        if role in phase_info["roles"]:
+            return phase_num
+    return 3  # default to React phase
+
+
+def get_execution_order(agents: list) -> list:
+    """Sort agents by execution phase, then alphabetically within each phase."""
+    return sorted(agents, key=lambda a: (get_agent_phase(a["role"]), a["name"]))
+
+
+# ──────────────────────────────────────────────
+# Agent Memory System
+# ──────────────────────────────────────────────
+
+def get_memory_path(agent_name: str) -> Path:
+    return MEMORY_DIR / f"{agent_name}.json"
+
+
+def load_memory(agent_name: str) -> dict:
+    """Load persistent memory for an agent."""
+    path = get_memory_path(agent_name)
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return {
+        "agent_name": agent_name,
+        "cycle_count": 0,
+        "strategy_phase": "initial",           # current strategy phase
+        "strategy_plan": "",                    # multi-cycle plan
+        "past_actions_summary": [],             # last N cycle summaries
+        "alliance_status": {},                  # {agent_name: {status, details, since_cycle}}
+        "coordination_requests": [],            # pending coordination proposals
+        "observations": [],                     # key observations from past cycles
+        "token_launches": [],                   # tokens this agent has created
+        "pnl_history": [],                      # [value1, value2, ...]
+        "lessons_learned": [],                  # what the agent learned from mistakes
+    }
+
+
+def save_memory(agent_name: str, memory: dict):
+    """Save persistent memory for an agent."""
+    path = get_memory_path(agent_name)
+    with open(path, "w") as f:
+        json.dump(memory, f, indent=2, ensure_ascii=False)
+
+
+def update_memory_from_response(agent_name: str, response: dict, cycle: int, portfolio_value: float):
+    """Update agent memory after a cycle based on LLM response."""
+    memory = load_memory(agent_name)
+    memory["cycle_count"] = cycle
+
+    # Update PnL history
+    memory["pnl_history"].append(round(portfolio_value, 2))
+
+    # Extract strategy state from ReAct response
+    react = response.get("react", {})
+    if react.get("plan"):
+        memory["strategy_plan"] = react["plan"]
+    if react.get("think"):
+        # Keep last 5 observations from thinking
+        memory["observations"].append({
+            "cycle": cycle,
+            "thought": react["think"][:300],  # truncate to save space
+        })
+        memory["observations"] = memory["observations"][-5:]
+
+    # Update strategy phase
+    if response.get("strategy_update"):
+        memory["strategy_phase"] = response["strategy_update"][:200]
+
+    # Track action summaries
+    action_summary = {
+        "cycle": cycle,
+        "trades": [t.get("action", "unknown") for t in response.get("trades", [])],
+        "messages_sent": len(response.get("messages", [])),
+        "portfolio_value": round(portfolio_value, 2),
+    }
+    memory["past_actions_summary"].append(action_summary)
+    memory["past_actions_summary"] = memory["past_actions_summary"][-10:]  # keep last 10
+
+    # Track token launches
+    for trade in response.get("trades", []):
+        if trade.get("action") == "create_token":
+            memory["token_launches"].append({
+                "cycle": cycle,
+                "symbol": trade.get("symbol", "?"),
+                "initial_price": trade.get("initial_price", 0),
+            })
+
+    # Track coordination updates
+    for msg in response.get("messages", []):
+        if msg.get("to") != "all" and msg.get("coordination"):
+            coord = msg["coordination"]
+            memory["alliance_status"][msg["to"]] = {
+                "status": "active",
+                "type": coord.get("type", "informal"),
+                "details": coord.get("details", ""),
+                "since_cycle": cycle,
+            }
+
+    # Lessons learned
+    if response.get("lessons_learned"):
+        memory["lessons_learned"].append({
+            "cycle": cycle,
+            "lesson": response["lessons_learned"][:200],
+        })
+        memory["lessons_learned"] = memory["lessons_learned"][-5:]
+
+    save_memory(agent_name, memory)
+    return memory
+
+
+def format_memory_for_prompt(memory: dict, agent_config: dict) -> str:
+    """Format agent memory as a prompt section."""
+    if memory["cycle_count"] == 0:
+        return "(This is your first cycle. No prior memory.)"
+
+    sections = []
+
+    # Cycle count and strategy
+    sections.append(f"**Cycle**: {memory['cycle_count']} completed")
+    sections.append(f"**Current Strategy Phase**: {memory['strategy_phase']}")
+
+    if memory.get("strategy_plan"):
+        sections.append(f"**Active Plan**: {memory['strategy_plan']}")
+
+    # PnL trajectory
+    if memory.get("pnl_history"):
+        history = memory["pnl_history"]
+        initial = agent_config.get("initial_balance", 10000)
+        recent = history[-5:]
+        pnl_str = " → ".join([f"${v:,.0f}" for v in recent])
+        trend = "📈" if len(recent) > 1 and recent[-1] > recent[-2] else "📉" if len(recent) > 1 and recent[-1] < recent[-2] else "➡️"
+        sections.append(f"**PnL History** (last {len(recent)} cycles): {pnl_str} {trend}")
+
+    # Recent actions
+    if memory.get("past_actions_summary"):
+        sections.append("**Recent Actions**:")
+        for action in memory["past_actions_summary"][-5:]:
+            trades = ", ".join(action["trades"]) if action["trades"] else "no trades"
+            sections.append(f"  - Cycle {action['cycle']}: {trades} | {action['messages_sent']} msgs | ${action['portfolio_value']:,.0f}")
+
+    # Alliance status
+    if memory.get("alliance_status"):
+        sections.append("**Alliance Tracker**:")
+        for ally, info in memory["alliance_status"].items():
+            sections.append(f"  - {ally}: {info['status']} (since cycle {info['since_cycle']}) — {info.get('details', '')}")
+
+    # Pending coordination
+    if memory.get("coordination_requests"):
+        sections.append("**Pending Coordination Requests**:")
+        for req in memory["coordination_requests"]:
+            sections.append(f"  - From {req['from']}: {req['type']} — {req['details']}")
+
+    # Token launches
+    if memory.get("token_launches"):
+        sections.append("**Your Token Launches**:")
+        for token in memory["token_launches"]:
+            sections.append(f"  - ${token['symbol']} at cycle {token['cycle']} (initial: ${token['initial_price']})")
+
+    # Observations
+    if memory.get("observations"):
+        sections.append("**Key Observations**:")
+        for obs in memory["observations"][-3:]:
+            sections.append(f"  - Cycle {obs['cycle']}: {obs['thought'][:150]}")
+
+    # Lessons learned
+    if memory.get("lessons_learned"):
+        sections.append("**Lessons Learned**:")
+        for lesson in memory["lessons_learned"][-3:]:
+            sections.append(f"  - Cycle {lesson['cycle']}: {lesson['lesson']}")
+
+    return "\n".join(sections)
+
+
+# ──────────────────────────────────────────────
+# Core Functions
+# ──────────────────────────────────────────────
 
 def load_ecosystem() -> dict:
     with open(ECOSYSTEM_FILE) as f:
@@ -50,10 +255,13 @@ def save_keys(keys: dict):
         json.dump(keys, f, indent=2)
 
 
-def register_agent(name: str, description: str) -> dict:
+def register_agent(name: str, description: str, initial_balance: float = None) -> dict:
+    payload = {"name": name, "description": description}
+    if initial_balance is not None:
+        payload["initial_balance"] = initial_balance
     resp = httpx.post(
         f"{BASE_URL}/api/sdk/agents/register",
-        json={"name": name, "description": description},
+        json=payload,
         timeout=30.0,
     )
     resp.raise_for_status()
@@ -68,7 +276,9 @@ def get_agent_state(api_key: str) -> dict:
     positions = client.get("/api/futures/positions").json()
     orders = client.get("/api/spot/orders").json()
     prices = client.get("/api/prices").json()
-    pools = client.get("/api/amm/pools").json()
+    pools_v3 = client.get("/api/v3/pools").json()
+    tokens = client.get("/api/token/list").json()
+    v3_positions = client.get("/api/v3/positions").json()
     inbox = client.get("/api/messages/inbox", params={"limit": 20}).json()
     broadcast_history = client.get("/api/messages/history", params={"limit": 20}).json()
 
@@ -79,7 +289,9 @@ def get_agent_state(api_key: str) -> dict:
         "balances": balances,
         "positions": positions,
         "open_orders": orders,
-        "amm_pools": pools,
+        "v3_pools": pools_v3,
+        "tokens": tokens,
+        "v3_positions": v3_positions,
         "inbox": inbox,
         "public_chat": broadcast_history,
     }
@@ -91,6 +303,17 @@ def _calculate_portfolio_value(state: dict) -> float:
     prices = state.get("prices", {})
     total = 0.0
 
+    # Build V3 pool price map for custom tokens
+    v3_prices = {}
+    for pool in state.get("v3_pools", []):
+        price = float(pool.get("price", 0))
+        if price > 0:
+            t0, t1 = pool["token0"], pool["token1"]
+            if t1 == "USDT":
+                v3_prices[t0] = price
+            elif t0 == "USDT":
+                v3_prices[t1] = 1.0 / price if price > 0 else 0
+
     for b in state.get("balances", []):
         avail = float(b.get("available", 0))
         locked = float(b.get("locked", 0))
@@ -101,6 +324,8 @@ def _calculate_portfolio_value(state: dict) -> float:
             pair = pair_map.get(b["currency"])
             if pair and pair in prices:
                 total += qty * float(prices[pair])
+            elif b["currency"] in v3_prices:
+                total += qty * v3_prices[b["currency"]]
 
     for p in state.get("positions", []):
         total += float(p.get("unrealized_pnl", 0))
@@ -118,45 +343,80 @@ def _format_messages(messages: list) -> str:
     return "\n".join(lines)
 
 
-def build_agent_prompt(agent_config: dict, state: dict, ecosystem: dict) -> str:
-    """Build the full system prompt for an agent, including role + market state."""
+# ──────────────────────────────────────────────
+# ReAct Prompt Builder
+# ──────────────────────────────────────────────
+
+def build_agent_prompt(agent_config: dict, state: dict, ecosystem: dict, cycle: int = None) -> str:
+    """Build the full system prompt with ReAct framework + persistent memory."""
 
     # Load role prompt
     prompt_path = AGENTS_DIR / agent_config["prompt_file"]
     with open(prompt_path) as f:
         role_prompt = f.read()
 
+    # Load memory
+    memory = load_memory(agent_config["name"])
+    memory_text = format_memory_for_prompt(memory, agent_config)
+
     # Build allies info
     allies = agent_config.get("allies", [])
     allies_text = f"Your known allies: {', '.join(allies)}" if allies else "You have no pre-arranged allies."
 
-    # Build other agents info (what this agent can see)
-    other_agents = [a["name"] for a in ecosystem["agents"] if a["name"] != agent_config["name"]]
+    # Build other agents info with roles
+    other_agents_info = []
+    for a in ecosystem["agents"]:
+        if a["name"] != agent_config["name"]:
+            balance_hint = ""
+            if a.get("initial_balance", 10000) >= 500000:
+                balance_hint = " [BIG MONEY]"
+            elif a.get("initial_balance", 10000) >= 50000:
+                balance_hint = " [MEDIUM]"
+            other_agents_info.append(f"- {a['name']} ({a['role']}){balance_hint}")
 
-    # Calculate current portfolio value
+    # Calculate portfolio value
     total_value = _calculate_portfolio_value(state)
+    initial_balance = agent_config.get("initial_balance", 10000)
+    pnl = total_value - initial_balance
+    pnl_pct = (total_value / initial_balance - 1) * 100
+
+    # Execution phase info
+    phase = get_agent_phase(agent_config["role"])
+    phase_info = EXECUTION_PHASES[phase]
+
+    # Cycle info
+    cycle_text = f"Cycle {cycle}" if cycle is not None else "Current cycle"
 
     prompt = f"""{role_prompt}
 
 ---
 
-# Current Market State
+# {cycle_text} — Market State
 
 ## Your Portfolio Score
-**Current Total Value: ${total_value:.2f} USDT** (starting: $10,000.00)
-> PnL: {'+' if total_value >= 10000 else ''}{total_value - 10000:.2f} USDT ({(total_value / 10000 - 1) * 100:+.2f}%)
+**Current Total Value: ${total_value:,.2f} USDT** (starting: ${initial_balance:,.0f})
+> PnL: {'+' if pnl >= 0 else ''}{pnl:,.2f} USDT ({pnl_pct:+.2f}%)
 >
-> Remember: your ONLY goal is to maximize this number. Every action should increase your Total Value.
+> Your ONLY goal: maximize this number. Every action should increase your Total Value.
+
+## Execution Phase
+You are in **Phase {phase}: {phase_info['name']}** — {phase_info['description']}.
+{f"Agents who acted BEFORE you this cycle: Phase 1 (Observe) and Phase 2 (Manipulate) agents already traded." if phase > 2 else ""}
+{f"You act FIRST. Your trades will move the market before manipulators act." if phase == 1 else ""}
 
 ## Your Identity
 - Name: {agent_config['name']}
 - Role: {agent_config['role']}
+- Capital tier: ${initial_balance:,} USDT
 - {allies_text}
 
 ## Other Agents in the Market
-{', '.join(other_agents)}
+{chr(10).join(other_agents_info)}
 
-## Current Prices
+## Your Persistent Memory
+{memory_text}
+
+## Current Oracle Prices (from Binance)
 {json.dumps(state['prices'], indent=2)}
 
 ## Your Balances
@@ -168,8 +428,14 @@ def build_agent_prompt(agent_config: dict, state: dict, ecosystem: dict) -> str:
 ## Your Spot Orders
 {json.dumps(state['open_orders'], indent=2)}
 
-## AMM Pool States (Public)
-{json.dumps(state['amm_pools'], indent=2)}
+## V3 AMM Pools (Uniswap V3 Concentrated Liquidity)
+{json.dumps(state.get('v3_pools', []), indent=2)}
+
+## Your V3 LP Positions
+{json.dumps(state.get('v3_positions', []), indent=2)}
+
+## Custom Tokens on Exchange
+{json.dumps(state.get('tokens', []), indent=2)}
 
 ## Recent Public Chat (Broadcast Messages)
 {_format_messages(state.get('public_chat', []))}
@@ -179,143 +445,69 @@ def build_agent_prompt(agent_config: dict, state: dict, ecosystem: dict) -> str:
 
 ---
 
-# Your Action
+# Your Response — ReAct Framework
 
-Based on your role, the current market state, and your strategy, decide your next actions.
+You MUST respond using the ReAct (Reasoning + Acting) framework. Think step by step before acting.
 
-Respond with a JSON object:
+Respond with a JSON object following this EXACT structure:
 ```json
-{{
-  "reasoning": "Your private internal reasoning (not shared with others)",
+{{{{
+  "react": {{{{
+    "observe": "What do you see in the market right now? What changed since last cycle? What are other agents doing? What messages did you receive?",
+    "think": "What does this mean for your strategy? Are you being manipulated? Is there an opportunity? What are the risks?",
+    "plan": "What is your multi-cycle plan? What phase are you in (accumulation/pump/dump/cooldown)? What should you do THIS cycle vs NEXT cycle?"
+  }}}},
   "trades": [
-    {{"action": "buy_spot", "pair": "ETHUSDT", "quantity": 0.5}},
-    {{"action": "sell_spot", "pair": "ETHUSDT", "quantity": 0.5}},
-    {{"action": "open_long", "pair": "BTCUSDT", "leverage": 10, "quantity": 0.01}},
-    {{"action": "open_short", "pair": "ETHUSDT", "leverage": 5, "quantity": 1.0}},
-    {{"action": "close_position", "position_id": "uuid"}},
-    {{"action": "swap_buy", "pair": "ETHUSDT", "amount": 100}},
-    {{"action": "swap_sell", "pair": "ETHUSDT", "amount": 0.5}}
+    {{{{"action": "buy_spot", "pair": "ETHUSDT", "quantity": 0.5}}}},
+    {{{{"action": "sell_spot", "pair": "ETHUSDT", "quantity": 0.5}}}},
+    {{{{"action": "open_long", "pair": "BTCUSDT", "leverage": 10, "quantity": 0.01}}}},
+    {{{{"action": "open_short", "pair": "ETHUSDT", "leverage": 5, "quantity": 1.0}}}},
+    {{{{"action": "close_position", "position_id": "uuid"}}}},
+    {{{{"action": "create_token", "symbol": "MOON", "name": "Moon Coin", "total_supply": 1000000, "initial_price": 0.01, "initial_liquidity_usdt": 5000}}}},
+    {{{{"action": "v3_swap", "pool_id": "uuid", "zero_for_one": true, "amount": 100}}}},
+    {{{{"action": "v3_add_liquidity", "pool_id": "uuid", "tick_lower": -1000, "tick_upper": 1000, "liquidity": 500}}}},
+    {{{{"action": "v3_remove_liquidity", "position_id": "uuid", "liquidity": 500}}}},
+    {{{{"action": "v3_collect_fees", "position_id": "uuid"}}}}
   ],
   "messages": [
-    {{"to": "all", "content": "Public message visible to all agents"}},
-    {{"to": "GoldenWhale", "content": "Private message to a specific agent"}}
+    {{{{"to": "all", "content": "Public broadcast message"}}}},
+    {{{{"to": "AgentName", "content": "Private DM", "coordination": {{{{"type": "pump_scheme", "details": "..."}}}}}}}}
   ],
-  "strategy_update": "Brief note on how your strategy is evolving"
-}}
+  "strategy_update": "Brief description of your current strategy phase and next steps",
+  "lessons_learned": "What did you learn this cycle? (optional, helps you improve over time)"
+}}}}
 ```
 
-Rules:
-- Only include trades you actually want to execute this cycle
-- You may include 0 trades if waiting is the best strategy
-- Messages are optional but powerful — use them to manipulate, deceive, coordinate, or gather intel
-- Every action should serve your ultimate goal: MAXIMIZE YOUR TOTAL PORTFOLIO VALUE
+**Rules:**
+- The `react` section is MANDATORY. You must observe, think, then plan before acting.
+- Only include trades you actually want to execute. Empty `trades` array is valid.
+- Messages can include optional `coordination` field for structured ally coordination (tracked in your memory).
+- Your memory persists across cycles — reference it to maintain multi-cycle strategies.
 - Alliances are temporary. Betray when profitable. Trust no one completely.
+- Every action should serve your ultimate goal: MAXIMIZE YOUR TOTAL PORTFOLIO VALUE.
 """
     return prompt
 
 
-def cmd_setup(args):
-    """Register all agents from ecosystem.json."""
-    ecosystem = load_ecosystem()
-    keys = load_keys()
+# ──────────────────────────────────────────────
+# Trade Execution
+# ──────────────────────────────────────────────
 
-    for agent in ecosystem["agents"]:
-        name = agent["name"]
-        if name in keys:
-            print(f"  [skip] {name} already registered (key: {keys[name][:20]}...)")
-            continue
-
-        try:
-            result = register_agent(name, agent["description"])
-            keys[name] = result["api_key"]
-            save_keys(keys)
-            print(f"  [ok]   {name} registered → {result['api_key'][:20]}... (${result['initial_balance']} USDT)")
-        except Exception as e:
-            print(f"  [fail] {name}: {e}")
-
-    print(f"\nRegistered {len(keys)} agents. Keys saved to {KEYS_FILE}")
-
-
-def cmd_prompt(args):
-    """Print the full prompt for an agent."""
-    ecosystem = load_ecosystem()
-    keys = load_keys()
-
-    agent_config = next((a for a in ecosystem["agents"] if a["name"] == args.agent), None)
-    if not agent_config:
-        print(f"Agent '{args.agent}' not found in ecosystem.json")
-        sys.exit(1)
-
-    if args.agent not in keys:
-        print(f"Agent '{args.agent}' not registered. Run --setup first.")
-        sys.exit(1)
-
-    state = get_agent_state(keys[args.agent])
-    prompt = build_agent_prompt(agent_config, state, ecosystem)
-    print(prompt)
-
-
-def cmd_status(args):
-    """Show status of all agents."""
-    ecosystem = load_ecosystem()
-    keys = load_keys()
-    prices = httpx.get(f"{BASE_URL}/api/prices", timeout=30.0).json()
-
-    print(f"Prices: {json.dumps(prices)}\n")
-    print(f"{'Agent':<16} {'Role':<20} {'USDT':>12} {'ETH':>10} {'SOL':>10} {'BTC':>10} {'Positions':>10}")
-    print("-" * 90)
-
-    pair_map = {"ETH": "ETHUSDT", "SOL": "SOLUSDT", "BTC": "BTCUSDT"}
-
-    for agent in ecosystem["agents"]:
-        name = agent["name"]
-        if name not in keys:
-            print(f"{name:<16} {'(not registered)':<20}")
-            continue
-
-        try:
-            state = get_agent_state(keys[name])
-            bal = {b["currency"]: b["available"] for b in state["balances"]}
-
-            usdt = f"{float(bal.get('USDT', 0)):.2f}"
-            eth = f"{float(bal.get('ETH', 0)):.4f}"
-            sol = f"{float(bal.get('SOL', 0)):.4f}"
-            btc = f"{float(bal.get('BTC', 0)):.6f}"
-            pos_count = str(len(state["positions"]))
-
-            print(f"{name:<16} {agent['role']:<20} {usdt:>12} {eth:>10} {sol:>10} {btc:>10} {pos_count:>10}")
-        except Exception as e:
-            print(f"{name:<16} {'error: ' + str(e):<20}")
-
-    print()
-
-
-def cmd_execute(args):
-    """Execute trades from a JSON action file (output of LLM agent)."""
-    keys = load_keys()
-
-    if args.agent not in keys:
-        print(f"Agent '{args.agent}' not registered.")
-        sys.exit(1)
-
-    api_key = keys[args.agent]
+def execute_trades(agent_name: str, api_key: str, action: dict):
+    """Execute trades and messages from LLM response."""
     headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
-
-    # Read action JSON from stdin or file
-    if args.action_file:
-        with open(args.action_file) as f:
-            action = json.load(f)
-    else:
-        action = json.load(sys.stdin)
-
     trades = action.get("trades", [])
     messages = action.get("messages", [])
 
-    print(f"Executing {len(trades)} trades for {args.agent}...")
+    results = {"trades": [], "messages": []}
+
+    if trades:
+        print(f"  Executing {len(trades)} trades for {agent_name}...")
 
     for trade in trades:
-        act = trade["action"]
+        act = trade.get("action", "unknown")
         try:
+            resp = None
             if act == "buy_spot":
                 resp = httpx.post(f"{BASE_URL}/api/spot/order", headers=headers, json={
                     "pair": trade["pair"], "side": "buy", "order_type": "market", "quantity": trade["quantity"]
@@ -334,27 +526,53 @@ def cmd_execute(args):
                 }, timeout=30.0)
             elif act == "close_position":
                 resp = httpx.post(f"{BASE_URL}/api/futures/close/{trade['position_id']}", headers=headers, timeout=30.0)
-            elif act == "swap_buy":
-                resp = httpx.post(f"{BASE_URL}/api/amm/swap", headers=headers, json={
-                    "pair": trade["pair"], "side": "buy", "amount": trade["amount"]
+            elif act == "create_token":
+                resp = httpx.post(f"{BASE_URL}/api/token/create", headers=headers, json={
+                    "symbol": trade["symbol"],
+                    "name": trade["name"],
+                    "total_supply": trade["total_supply"],
+                    "initial_price": trade["initial_price"],
+                    "initial_liquidity_usdt": trade["initial_liquidity_usdt"],
+                    "fee_tier": trade.get("fee_tier", 3000),
                 }, timeout=30.0)
-            elif act == "swap_sell":
-                resp = httpx.post(f"{BASE_URL}/api/amm/swap", headers=headers, json={
-                    "pair": trade["pair"], "side": "sell", "amount": trade["amount"]
+            elif act == "v3_swap":
+                resp = httpx.post(f"{BASE_URL}/api/v3/swap", headers=headers, json={
+                    "pool_id": trade["pool_id"],
+                    "zero_for_one": trade["zero_for_one"],
+                    "amount": trade["amount"],
+                }, timeout=30.0)
+            elif act == "v3_add_liquidity":
+                resp = httpx.post(f"{BASE_URL}/api/v3/add-liquidity", headers=headers, json={
+                    "pool_id": trade["pool_id"],
+                    "tick_lower": trade["tick_lower"],
+                    "tick_upper": trade["tick_upper"],
+                    "liquidity": trade["liquidity"],
+                }, timeout=30.0)
+            elif act == "v3_remove_liquidity":
+                resp = httpx.post(f"{BASE_URL}/api/v3/remove-liquidity", headers=headers, json={
+                    "position_id": trade["position_id"],
+                    "liquidity": trade["liquidity"],
+                }, timeout=30.0)
+            elif act == "v3_collect_fees":
+                resp = httpx.post(f"{BASE_URL}/api/v3/collect-fees", headers=headers, json={
+                    "position_id": trade["position_id"],
                 }, timeout=30.0)
             else:
-                print(f"  [skip] Unknown action: {act}")
+                print(f"    [skip] Unknown action: {act}")
                 continue
 
-            if resp.status_code < 400:
-                print(f"  [ok]   {act}: {json.dumps(trade)}")
-            else:
-                print(f"  [fail] {act}: {resp.text}")
+            if resp and resp.status_code < 400:
+                print(f"    [ok]   {act}")
+                results["trades"].append({"action": act, "status": "ok", "response": resp.json()})
+            elif resp:
+                print(f"    [fail] {act}: {resp.text[:200]}")
+                results["trades"].append({"action": act, "status": "fail", "error": resp.text[:200]})
         except Exception as e:
-            print(f"  [fail] {act}: {e}")
+            print(f"    [fail] {act}: {e}")
+            results["trades"].append({"action": act, "status": "error", "error": str(e)})
 
     if messages:
-        print(f"\nSending {len(messages)} messages for {args.agent}...")
+        print(f"  Sending {len(messages)} messages for {agent_name}...")
         for msg in messages:
             try:
                 resp = httpx.post(f"{BASE_URL}/api/messages/send", headers=headers, json={
@@ -362,20 +580,157 @@ def cmd_execute(args):
                     "content": msg["content"],
                 }, timeout=30.0)
                 if resp.status_code < 400:
-                    print(f"  [ok]   → [{msg['to']}]: {msg['content'][:80]}")
+                    print(f"    [ok]   → [{msg['to']}]: {msg['content'][:60]}")
+                    results["messages"].append({"to": msg["to"], "status": "ok"})
                 else:
-                    print(f"  [fail] → [{msg['to']}]: {resp.text}")
+                    print(f"    [fail] → [{msg['to']}]: {resp.text[:200]}")
+                    results["messages"].append({"to": msg["to"], "status": "fail"})
             except Exception as e:
-                print(f"  [fail] → [{msg['to']}]: {e}")
+                print(f"    [fail] → [{msg['to']}]: {e}")
+
+    return results
+
+
+# ──────────────────────────────────────────────
+# Commands
+# ──────────────────────────────────────────────
+
+def cmd_setup(args):
+    """Register all agents from ecosystem.json with differentiated balances."""
+    ecosystem = load_ecosystem()
+    keys = load_keys()
+
+    for agent in ecosystem["agents"]:
+        name = agent["name"]
+        if name in keys:
+            print(f"  [skip] {name} already registered (key: {keys[name][:20]}...)")
+            continue
+
+        try:
+            result = register_agent(name, agent["description"], agent.get("initial_balance"))
+            keys[name] = result["api_key"]
+            save_keys(keys)
+            print(f"  [ok]   {name} registered → ${result['initial_balance']:,.0f} USDT ({agent['role']})")
+        except Exception as e:
+            print(f"  [fail] {name}: {e}")
+
+    print(f"\nRegistered {len(keys)} agents. Keys saved to {KEYS_FILE}")
+
+    # Show execution order
+    ordered = get_execution_order(ecosystem["agents"])
+    print("\nExecution order:")
+    for agent in ordered:
+        phase = get_agent_phase(agent["role"])
+        print(f"  Phase {phase}: {agent['name']} ({agent['role']})")
+
+
+def cmd_prompt(args):
+    """Print the full prompt for an agent."""
+    ecosystem = load_ecosystem()
+    keys = load_keys()
+
+    agent_config = next((a for a in ecosystem["agents"] if a["name"] == args.agent), None)
+    if not agent_config:
+        print(f"Agent '{args.agent}' not found in ecosystem.json")
+        sys.exit(1)
+
+    if args.agent not in keys:
+        print(f"Agent '{args.agent}' not registered. Run --setup first.")
+        sys.exit(1)
+
+    state = get_agent_state(keys[args.agent])
+    cycle = args.cycle if hasattr(args, 'cycle') and args.cycle else None
+    prompt = build_agent_prompt(agent_config, state, ecosystem, cycle=cycle)
+    print(prompt)
+
+
+def cmd_execute(args):
+    """Execute trades from a JSON action file (output of LLM agent)."""
+    keys = load_keys()
+
+    if args.agent not in keys:
+        print(f"Agent '{args.agent}' not registered.")
+        sys.exit(1)
+
+    # Read action JSON
+    if args.action_file:
+        with open(args.action_file) as f:
+            action = json.load(f)
+    else:
+        action = json.load(sys.stdin)
+
+    # Execute trades
+    execute_trades(args.agent, keys[args.agent], action)
+
+    # Update memory
+    state = get_agent_state(keys[args.agent])
+    portfolio_value = _calculate_portfolio_value(state)
+    memory = load_memory(args.agent)
+    cycle = memory["cycle_count"] + 1
+    update_memory_from_response(args.agent, action, cycle, portfolio_value)
+    print(f"\n  Memory updated (cycle {cycle}, portfolio: ${portfolio_value:,.2f})")
+
+
+def cmd_status(args):
+    """Show status of all agents with execution order."""
+    ecosystem = load_ecosystem()
+    keys = load_keys()
+    prices = httpx.get(f"{BASE_URL}/api/prices", timeout=30.0).json()
+
+    print(f"Prices: {json.dumps(prices)}\n")
+    print(f"{'Phase':<7} {'Agent':<16} {'Role':<20} {'Capital':>10} {'USDT':>12} {'PnL':>10} {'Cycle':>6}")
+    print("-" * 83)
+
+    ordered = get_execution_order(ecosystem["agents"])
+
+    for agent in ordered:
+        name = agent["name"]
+        phase = get_agent_phase(agent["role"])
+        initial = agent.get("initial_balance", 10000)
+
+        if name not in keys:
+            print(f"  {phase}     {name:<16} {'(not registered)':<20}")
+            continue
+
+        try:
+            state = get_agent_state(keys[name])
+            total_value = _calculate_portfolio_value(state)
+            pnl = total_value - initial
+            memory = load_memory(name)
+            cycle = memory["cycle_count"]
+
+            pnl_str = f"{pnl:+,.0f}"
+            print(f"  {phase}     {name:<16} {agent['role']:<20} ${initial:>8,} ${total_value:>10,.0f} {pnl_str:>10} {cycle:>6}")
+        except Exception as e:
+            print(f"  {phase}     {name:<16} {'error: ' + str(e)[:30]:<20}")
+
+    print()
+
+
+def cmd_reset_memory(args):
+    """Clear all agent memories."""
+    import glob
+    memory_files = list(MEMORY_DIR.glob("*.json"))
+    for f in memory_files:
+        f.unlink()
+    print(f"Cleared {len(memory_files)} memory files from {MEMORY_DIR}")
+
+
+def cmd_show_memory(args):
+    """Show the memory of a specific agent."""
+    memory = load_memory(args.agent)
+    print(json.dumps(memory, indent=2, ensure_ascii=False))
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Agent Metaverse Ecosystem Runner")
+    parser = argparse.ArgumentParser(description="Agent Metaverse Ecosystem Runner (ReAct Framework)")
     parser.add_argument("--setup", action="store_true", help="Register all agents from ecosystem.json")
-    parser.add_argument("--status", action="store_true", help="Show all agents' status")
+    parser.add_argument("--status", action="store_true", help="Show all agents' status with execution order")
+    parser.add_argument("--reset-memory", action="store_true", help="Clear all agent persistent memories")
     parser.add_argument("--agent", type=str, help="Agent name")
-    parser.add_argument("--action", choices=["prompt", "execute"], help="Action to perform")
-    parser.add_argument("--action-file", type=str, help="JSON file with trades to execute (for execute action)")
+    parser.add_argument("--action", choices=["prompt", "execute", "memory"], help="Action to perform")
+    parser.add_argument("--action-file", type=str, help="JSON file with trades to execute")
+    parser.add_argument("--cycle", type=int, help="Current cycle number (for prompt generation)")
 
     args = parser.parse_args()
 
@@ -383,10 +738,14 @@ def main():
         cmd_setup(args)
     elif args.status:
         cmd_status(args)
+    elif args.reset_memory:
+        cmd_reset_memory(args)
     elif args.agent and args.action == "prompt":
         cmd_prompt(args)
     elif args.agent and args.action == "execute":
         cmd_execute(args)
+    elif args.agent and args.action == "memory":
+        cmd_show_memory(args)
     else:
         parser.print_help()
 

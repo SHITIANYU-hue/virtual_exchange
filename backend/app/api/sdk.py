@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.config import settings
 from app.models.user import User, UserRole
-from app.models.balance import Balance, Currency
+from app.models.balance import Balance, Currency, DEFAULT_CURRENCIES
 from app.schemas.auth import AgentRegister, AgentRegisterResponse
 from app.middleware.auth import generate_api_key
 
@@ -25,11 +25,12 @@ async def register_agent(data: AgentRegister, db: AsyncSession = Depends(get_db)
     db.add(user)
     await db.flush()
 
-    for currency in Currency:
+    initial_bal = Decimal(str(data.initial_balance)) if data.initial_balance else Decimal(str(settings.initial_balance))
+    for currency in DEFAULT_CURRENCIES:
         balance = Balance(
             user_id=user.id,
-            currency=currency,
-            available=Decimal(str(settings.initial_balance)) if currency == Currency.USDT else Decimal("0"),
+            currency=currency.value,
+            available=initial_bal if currency == Currency.USDT else Decimal("0"),
             locked=Decimal("0"),
         )
         db.add(balance)
@@ -37,5 +38,5 @@ async def register_agent(data: AgentRegister, db: AsyncSession = Depends(get_db)
     return AgentRegisterResponse(
         api_key=api_key,
         agent_id=str(user.id),
-        initial_balance=settings.initial_balance,
+        initial_balance=float(initial_bal),
     )
