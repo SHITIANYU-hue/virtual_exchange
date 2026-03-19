@@ -16,6 +16,11 @@ getNextSqrtPriceFromOutput:
 """
 from decimal import Decimal, ROUND_UP, ROUND_DOWN
 
+# Circuit breaker constants to prevent overflow
+MIN_LIQUIDITY = Decimal("100")  # Minimum pool liquidity in USDT terms
+MAX_OUTPUT_AMOUNT = Decimal("1000000000")  # Max 1 billion tokens per swap
+MAX_PRICE_IMPACT = Decimal("0.99")  # Max 99% price movement per swap
+
 
 def get_amount0_delta(
     sqrt_ratio_a: Decimal,
@@ -36,13 +41,28 @@ def get_amount0_delta(
     if sqrt_ratio_a <= 0:
         raise ValueError("sqrt_ratio_a must be positive")
 
+    # Circuit breaker: check for extreme price ratios
+    price_ratio = sqrt_ratio_b / sqrt_ratio_a if sqrt_ratio_a > 0 else Decimal("999999")
+    if price_ratio > (Decimal("1") + MAX_PRICE_IMPACT) / (Decimal("1") - MAX_PRICE_IMPACT):
+        # Price would move more than MAX_PRICE_IMPACT, cap the result
+        raise ValueError(f"Price impact too high: ratio {price_ratio}")
+
     numerator = liquidity * (sqrt_ratio_b - sqrt_ratio_a)
     denominator = sqrt_ratio_a * sqrt_ratio_b
 
     if denominator == 0:
         raise ValueError("Zero denominator in getAmount0Delta")
 
+    # Circuit breaker: prevent division by very small denominator
+    MIN_DENOMINATOR = Decimal("0.00000001")
+    if denominator < MIN_DENOMINATOR:
+        raise ValueError(f"Denominator too small in getAmount0Delta: {denominator}")
+
     result = numerator / denominator
+
+    # Circuit breaker: cap maximum output
+    if result > MAX_OUTPUT_AMOUNT:
+        raise ValueError(f"Output amount too large: {result} exceeds {MAX_OUTPUT_AMOUNT}")
 
     if round_up:
         # Round up: ceiling
@@ -67,7 +87,16 @@ def get_amount1_delta(
     if sqrt_ratio_a > sqrt_ratio_b:
         sqrt_ratio_a, sqrt_ratio_b = sqrt_ratio_b, sqrt_ratio_a
 
+    # Circuit breaker: check for extreme price movements
+    price_ratio = sqrt_ratio_b / sqrt_ratio_a if sqrt_ratio_a > 0 else Decimal("999999")
+    if price_ratio > (Decimal("1") + MAX_PRICE_IMPACT) / (Decimal("1") - MAX_PRICE_IMPACT):
+        raise ValueError(f"Price impact too high: ratio {price_ratio}")
+
     result = liquidity * (sqrt_ratio_b - sqrt_ratio_a)
+
+    # Circuit breaker: cap maximum output
+    if result > MAX_OUTPUT_AMOUNT:
+        raise ValueError(f"Output amount too large: {result} exceeds {MAX_OUTPUT_AMOUNT}")
 
     if round_up:
         return result.quantize(Decimal("0.00000001"), rounding=ROUND_UP)
@@ -95,6 +124,10 @@ def get_next_sqrt_price_from_input(
     if sqrt_price_current <= 0 or liquidity <= 0:
         raise ValueError("Price and liquidity must be positive")
 
+    # Circuit breaker: check minimum liquidity
+    if liquidity < MIN_LIQUIDITY:
+        raise ValueError(f"Liquidity too low: {liquidity} < {MIN_LIQUIDITY}")
+
     if amount_in == 0:
         return sqrt_price_current
 
@@ -102,11 +135,28 @@ def get_next_sqrt_price_from_input(
         # Adding token0 → price goes down
         # √p_next = L × √P / (L + √P × Δx)
         denominator = liquidity + sqrt_price_current * amount_in
-        return (liquidity * sqrt_price_current) / denominator
+        if denominator <= 0:
+            raise ValueError("Invalid denominator in getNextSqrtPriceFromInput")
+
+        sqrt_price_next = (liquidity * sqrt_price_current) / denominator
+
+        # Circuit breaker: check price impact
+        price_ratio = sqrt_price_current / sqrt_price_next if sqrt_price_next > 0 else Decimal("999999")
+        if price_ratio > Decimal("1") + MAX_PRICE_IMPACT:
+            raise ValueError(f"Price impact too high: {price_ratio}")
+
+        return sqrt_price_next
     else:
         # Adding token1 → price goes up
         # √p_next = √P + Δy / L
-        return sqrt_price_current + amount_in / liquidity
+        sqrt_price_next = sqrt_price_current + amount_in / liquidity
+
+        # Circuit breaker: check price impact
+        price_ratio = sqrt_price_next / sqrt_price_current if sqrt_price_current > 0 else Decimal("999999")
+        if price_ratio > Decimal("1") + MAX_PRICE_IMPACT:
+            raise ValueError(f"Price impact too high: {price_ratio}")
+
+        return sqrt_price_next
 
 
 def get_next_sqrt_price_from_output(
@@ -129,20 +179,42 @@ def get_next_sqrt_price_from_output(
     if sqrt_price_current <= 0 or liquidity <= 0:
         raise ValueError("Price and liquidity must be positive")
 
+    # Circuit breaker: check minimum liquidity
+    if liquidity < MIN_LIQUIDITY:
+        raise ValueError(f"Liquidity too low: {liquidity} < {MIN_LIQUIDITY}")
+
+    # Circuit breaker: check maximum output
+    if amount_out > MAX_OUTPUT_AMOUNT:
+        raise ValueError(f"Output amount too large: {amount_out} exceeds {MAX_OUTPUT_AMOUNT}")
+
     if amount_out == 0:
         return sqrt_price_current
 
     if zero_for_one:
         # Outputting token1 → price goes down
         # √p_next = √P - Δy / L
-        result = sqrt_price_current - amount_out / liquidity
-        if result <= 0:
+        sqrt_price_next = sqrt_price_current - amount_out / liquidity
+        if sqrt_price_next <= 0:
             raise ValueError("Insufficient liquidity for output amount")
-        return result
+
+        # Circuit breaker: check price impact
+        price_ratio = sqrt_price_current / sqrt_price_next if sqrt_price_next > 0 else Decimal("999999")
+        if price_ratio > Decimal("1") + MAX_PRICE_IMPACT:
+            raise ValueError(f"Price impact too high: {price_ratio}")
+
+        return sqrt_price_next
     else:
         # Outputting token0 → price goes up
         # √p_next = L × √P / (L - √P × Δx)
         denominator = liquidity - sqrt_price_current * amount_out
         if denominator <= 0:
             raise ValueError("Insufficient liquidity for output amount")
-        return (liquidity * sqrt_price_current) / denominator
+
+        sqrt_price_next = (liquidity * sqrt_price_current) / denominator
+
+        # Circuit breaker: check price impact
+        price_ratio = sqrt_price_next / sqrt_price_current if sqrt_price_current > 0 else Decimal("999999")
+        if price_ratio > Decimal("1") + MAX_PRICE_IMPACT:
+            raise ValueError(f"Price impact too high: {price_ratio}")
+
+        return sqrt_price_next

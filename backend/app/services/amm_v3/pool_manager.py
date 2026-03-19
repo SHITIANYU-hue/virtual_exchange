@@ -517,6 +517,26 @@ async def swap(
     # Support both UUID and token pair identifiers (e.g., "MOON/USDT" or "ETHUSDT")
     pool = await _get_pool_by_id_or_pair(db, str(pool_id) if isinstance(pool_id, UUID) else pool_id)
 
+    # Circuit breaker: check minimum pool liquidity
+    MIN_POOL_LIQUIDITY = Decimal("100")  # Minimum 100 USDT equivalent liquidity
+    if pool.liquidity < MIN_POOL_LIQUIDITY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient pool liquidity: {pool.liquidity} < {MIN_POOL_LIQUIDITY}. Pool is too shallow for swaps."
+        )
+
+    # Circuit breaker: check swap amount relative to pool size
+    # Estimate pool value: liquidity * sqrt_price (rough approximation)
+    pool_value_estimate = pool.liquidity * pool.sqrt_price
+    MAX_SWAP_RATIO = Decimal("0.5")  # Max 50% of pool value per swap
+    max_swap_amount = pool_value_estimate * MAX_SWAP_RATIO
+
+    if abs(amount_specified) > max_swap_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Swap amount too large: {abs(amount_specified)} exceeds {MAX_SWAP_RATIO*100}% of pool (max {max_swap_amount})"
+        )
+
     # Validate and set price limit
     if sqrt_price_limit is None or sqrt_price_limit == Decimal("0"):
         if zero_for_one:
@@ -580,7 +600,15 @@ async def swap(
                 tick = get_tick_at_sqrt_ratio(sqrt_price)
             continue
 
-        step = compute_swap_step(sqrt_price, sqrt_ratio_target, liquidity, amount_remaining, pool.fee)
+        # Wrap compute_swap_step in try-except to catch overflow errors
+        try:
+            step = compute_swap_step(sqrt_price, sqrt_ratio_target, liquidity, amount_remaining, pool.fee)
+        except ValueError as e:
+            # Circuit breaker triggered - provide helpful error message
+            raise HTTPException(
+                status_code=400,
+                detail=f"Swap calculation failed: {str(e)}. This usually means the swap is too large for the available liquidity."
+            )
 
         # Update state
         sqrt_price = step.sqrt_ratio_next
