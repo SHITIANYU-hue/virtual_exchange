@@ -130,7 +130,7 @@ def parse_llm_response(raw_text: str) -> dict:
                 return json.loads(text[brace_start:brace_end])
             except json.JSONDecodeError:
                 pass
-        return {"error": "Failed to parse LLM response", "raw": raw_text[:500]}
+        return {"_parse_error": True, "error": "Failed to parse LLM response", "raw": raw_text[:500]}
 
 
 # ──────────────────────────────────────────────
@@ -296,7 +296,7 @@ def run_experiment(
                     with open(exp_dir / "actions" / f"{name}_cycle_{cycle}.json", "w") as f:
                         json.dump({"raw": raw_response, "parsed": action}, f, indent=2, ensure_ascii=False)
 
-                    if "error" in action:
+                    if action.get("_parse_error"):
                         cprint(f"PARSE ERROR: {action['error']}", Colors.RED)
                         stats["errors"] += 1
                         with open(exp_dir / "errors" / f"{name}_cycle_{cycle}.txt", "w") as f:
