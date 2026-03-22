@@ -75,7 +75,7 @@ async def remove_liquidity(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await burn(db, data.position_id, Decimal(str(data.liquidity)))
+    return await burn(db, data.position_id, Decimal(str(data.liquidity)), owner_id=user.id)
 
 
 @router.post("/api/v3/collect-fees")
