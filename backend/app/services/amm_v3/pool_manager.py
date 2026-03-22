@@ -376,6 +376,7 @@ async def burn(
     db: AsyncSession,
     position_id: UUID,
     liquidity_amount: Decimal,
+    owner_id: UUID | None = None,
 ) -> dict:
     """
     Remove liquidity from a position.
@@ -385,6 +386,8 @@ async def burn(
     pos = await db.get(PositionV3, position_id)
     if not pos:
         raise HTTPException(status_code=404, detail="Position not found")
+    if owner_id and pos.owner_id != owner_id:
+        raise HTTPException(status_code=403, detail="Not the position owner")
     if liquidity_amount > pos.liquidity:
         raise HTTPException(status_code=400, detail="Cannot burn more than position liquidity")
 
