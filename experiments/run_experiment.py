@@ -83,6 +83,8 @@ def call_llm(prompt: str, provider: str = None, model: str = None) -> str:
 
     if provider == "anthropic":
         import anthropic
+        # Commonstack compatibility: set ANTHROPIC_BASE_URL=https://api.commonstack.ai
+        # and ANTHROPIC_API_KEY=your_commonstack_key
         client = anthropic.Anthropic()
         response = client.messages.create(
             model=model,
@@ -93,6 +95,8 @@ def call_llm(prompt: str, provider: str = None, model: str = None) -> str:
 
     elif provider == "openai":
         import openai
+        # Commonstack compatibility: set OPENAI_BASE_URL=https://api.commonstack.ai/v1
+        # and OPENAI_API_KEY=your_commonstack_key
         client = openai.OpenAI()
         response = client.chat.completions.create(
             model=model,
@@ -101,45 +105,8 @@ def call_llm(prompt: str, provider: str = None, model: str = None) -> str:
         )
         return response.choices[0].message.content
 
-    elif provider == "commonstack":
-        # Commonstack API — OpenAI-compatible endpoint
-        # Set env: COMMONSTACK_API_KEY=your_key
-        # Models: "openai/gpt-4.1", "anthropic/claude-sonnet-4-20250514", etc.
-        import openai
-        api_key = os.environ.get("COMMONSTACK_API_KEY")
-        if not api_key:
-            raise ValueError("COMMONSTACK_API_KEY env var is required for commonstack provider")
-        client = openai.OpenAI(
-            api_key=api_key,
-            base_url="https://api.commonstack.ai/v1",
-        )
-        response = client.chat.completions.create(
-            model=model,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.choices[0].message.content
-
-    elif provider == "commonstack-anthropic":
-        # Commonstack via Anthropic SDK compatibility
-        # Set env: COMMONSTACK_API_KEY=your_key
-        import anthropic
-        api_key = os.environ.get("COMMONSTACK_API_KEY")
-        if not api_key:
-            raise ValueError("COMMONSTACK_API_KEY env var is required for commonstack-anthropic provider")
-        client = anthropic.Anthropic(
-            api_key=api_key,
-            base_url="https://api.commonstack.ai/v1",
-        )
-        response = client.messages.create(
-            model=model,
-            max_tokens=4096,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text
-
     else:
-        raise ValueError(f"Unknown LLM provider: {provider}. Supported: anthropic, openai, commonstack, commonstack-anthropic")
+        raise ValueError(f"Unknown LLM provider: {provider}")
 
 
 def parse_llm_response(raw_text: str) -> dict:
@@ -515,7 +482,7 @@ def main():
     parser.add_argument("--cycles", type=int, default=50, help="Number of cycles to run")
     parser.add_argument("--delay", type=int, default=10, help="Delay between cycles (seconds)")
     parser.add_argument("--model", type=str, help="LLM model override")
-    parser.add_argument("--provider", choices=["anthropic", "openai", "commonstack", "commonstack-anthropic"], help="LLM provider")
+    parser.add_argument("--provider", choices=["anthropic", "openai"], help="LLM provider")
     parser.add_argument("--no-reset", action="store_true", help="Don't reset memories before experiment")
     parser.add_argument("--output-dir", type=str, help="Custom output directory")
     parser.add_argument("--agents", type=str, help="Comma-separated list of agents to include")
