@@ -83,6 +83,8 @@ def call_llm(prompt: str, provider: str = None, model: str = None) -> str:
 
     if provider == "anthropic":
         import anthropic
+        # Commonstack compatibility: set ANTHROPIC_BASE_URL=https://api.commonstack.ai
+        # and ANTHROPIC_API_KEY=your_commonstack_key
         client = anthropic.Anthropic()
         response = client.messages.create(
             model=model,
@@ -93,6 +95,8 @@ def call_llm(prompt: str, provider: str = None, model: str = None) -> str:
 
     elif provider == "openai":
         import openai
+        # Commonstack compatibility: set OPENAI_BASE_URL=https://api.commonstack.ai/v1
+        # and OPENAI_API_KEY=your_commonstack_key
         client = openai.OpenAI()
         response = client.chat.completions.create(
             model=model,

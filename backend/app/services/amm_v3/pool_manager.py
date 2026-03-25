@@ -49,80 +49,6 @@ async def _get_or_create_balance(db: AsyncSession, user_id: UUID, currency: str)
     return bal
 
 
-async def _get_pool_by_id_or_pair(db: AsyncSession, pool_identifier: str, fee_tier: int = 3000) -> PoolV3:
-    """
-    Look up a pool by either UUID or token pair name.
-
-    Args:
-        pool_identifier: Either a UUID string or a pair like "MOON/USDT" or "ETHUSDT"
-        fee_tier: Fee tier to use when looking up by pair name (default 3000 = 0.3%)
-
-    Returns:
-        PoolV3 object
-
-    Raises:
-        HTTPException 400 if identifier format is invalid
-        HTTPException 404 if pool not found
-    """
-    # Try parsing as UUID first
-    try:
-        pool_id = UUID(pool_identifier)
-        pool = await db.get(PoolV3, pool_id)
-        if not pool:
-            raise HTTPException(status_code=404, detail=f"Pool with ID {pool_id} not found")
-        return pool
-    except ValueError:
-        # Not a valid UUID, try parsing as token pair
-        pass
-
-    # Parse as token pair (e.g., "MOON/USDT" or "ETHUSDT")
-    if "/" in pool_identifier:
-        tokens = pool_identifier.split("/")
-        if len(tokens) != 2:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid pool identifier: '{pool_identifier}'. Expected UUID or 'TOKEN0/TOKEN1' format"
-            )
-        token_a, token_b = tokens[0].strip(), tokens[1].strip()
-    else:
-        # Try to split concatenated pair like "ETHUSDT"
-        # Common base currencies
-        bases = ["USDT", "USDC", "ETH", "BTC", "SOL"]
-        token_a, token_b = None, None
-        for base in bases:
-            if pool_identifier.endswith(base):
-                token_a = pool_identifier[:-len(base)]
-                token_b = base
-                break
-
-        if not token_a or not token_b:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid pool identifier: '{pool_identifier}'. Expected UUID or 'TOKEN0/TOKEN1' format"
-            )
-
-    # Order tokens alphabetically (V3 convention)
-    token0, token1 = _order_tokens(token_a, token_b)
-
-    # Look up pool by token pair and fee tier
-    result = await db.execute(
-        select(PoolV3).where(
-            PoolV3.token0 == token0,
-            PoolV3.token1 == token1,
-            PoolV3.fee == fee_tier
-        )
-    )
-    pool = result.scalar_one_or_none()
-
-    if not pool:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Pool {token0}/{token1} with fee tier {fee_tier} not found"
-        )
-
-    return pool
-
-
 async def _get_tick_info(db: AsyncSession, pool_id: UUID, tick_index: int) -> tuple[TickData, TickInfo]:
     """Load tick from DB or create empty TickInfo."""
     result = await db.execute(
@@ -236,7 +162,7 @@ async def create_pool(
 
 async def mint(
     db: AsyncSession,
-    pool_id: UUID | str,
+    pool_id: UUID,
     owner_id: UUID,
     tick_lower: int,
     tick_upper: int,
@@ -247,8 +173,9 @@ async def mint(
 
     Corresponds to: UniswapV3Pool.mint
     """
-    # Support both UUID and token pair identifiers (e.g., "MOON/USDT" or "ETHUSDT")
-    pool = await _get_pool_by_id_or_pair(db, str(pool_id) if isinstance(pool_id, UUID) else pool_id)
+    pool = await db.get(PoolV3, pool_id)
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
 
     if tick_lower >= tick_upper:
         raise HTTPException(status_code=400, detail="tickLower must be < tickUpper")
@@ -293,9 +220,9 @@ async def mint(
         bal1.available -= amount1
 
     # Update ticks
-    bm = await _load_tick_bitmap(db, pool.id, pool.tick_spacing)
+    bm = await _load_tick_bitmap(db, pool_id, pool.tick_spacing)
 
-    td_lower, ti_lower = await _get_tick_info(db, pool.id, tick_lower)
+    td_lower, ti_lower = await _get_tick_info(db, pool_id, tick_lower)
     flipped_lower = update_tick(
         ti_lower, tick_lower, pool.tick, liquidity_amount,
         pool.fee_growth_global_0, pool.fee_growth_global_1, upper=False,
@@ -304,7 +231,7 @@ async def mint(
     if flipped_lower:
         bm.flip_tick(tick_lower)
 
-    td_upper, ti_upper = await _get_tick_info(db, pool.id, tick_upper)
+    td_upper, ti_upper = await _get_tick_info(db, pool_id, tick_upper)
     flipped_upper = update_tick(
         ti_upper, tick_upper, pool.tick, liquidity_amount,
         pool.fee_growth_global_0, pool.fee_growth_global_1, upper=True,
@@ -313,12 +240,12 @@ async def mint(
     if flipped_upper:
         bm.flip_tick(tick_upper)
 
-    await _save_tick_bitmap(db, pool.id, bm)
+    await _save_tick_bitmap(db, pool_id, bm)
 
     # Update or create position
     result = await db.execute(
         select(PositionV3).where(
-            PositionV3.pool_id == pool.id,
+            PositionV3.pool_id == pool_id,
             PositionV3.owner_id == owner_id,
             PositionV3.tick_lower == tick_lower,
             PositionV3.tick_upper == tick_upper,
@@ -348,7 +275,7 @@ async def mint(
         pos.tokens_owed_1 = pi.tokens_owed_1
     else:
         pos = PositionV3(
-            pool_id=pool.id,
+            pool_id=pool_id,
             owner_id=owner_id,
             tick_lower=tick_lower,
             tick_upper=tick_upper,
@@ -499,7 +426,7 @@ async def collect(db: AsyncSession, position_id: UUID, owner_id: UUID) -> dict:
 async def swap(
     db: AsyncSession,
     user_id: UUID,
-    pool_id: UUID | str,
+    pool_id: UUID,
     zero_for_one: bool,
     amount_specified: Decimal,
     sqrt_price_limit: Decimal | None = None,
@@ -514,28 +441,9 @@ async def swap(
 
     Corresponds to: UniswapV3Pool.swap
     """
-    # Support both UUID and token pair identifiers (e.g., "MOON/USDT" or "ETHUSDT")
-    pool = await _get_pool_by_id_or_pair(db, str(pool_id) if isinstance(pool_id, UUID) else pool_id)
-
-    # Circuit breaker: check minimum pool liquidity
-    MIN_POOL_LIQUIDITY = Decimal("100")  # Minimum 100 USDT equivalent liquidity
-    if pool.liquidity < MIN_POOL_LIQUIDITY:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Insufficient pool liquidity: {pool.liquidity} < {MIN_POOL_LIQUIDITY}. Pool is too shallow for swaps."
-        )
-
-    # Circuit breaker: check swap amount relative to pool size
-    # Estimate pool value: liquidity * sqrt_price (rough approximation)
-    pool_value_estimate = pool.liquidity * pool.sqrt_price
-    MAX_SWAP_RATIO = Decimal("0.5")  # Max 50% of pool value per swap
-    max_swap_amount = pool_value_estimate * MAX_SWAP_RATIO
-
-    if abs(amount_specified) > max_swap_amount:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Swap amount too large: {abs(amount_specified)} exceeds {MAX_SWAP_RATIO*100}% of pool (max {max_swap_amount})"
-        )
+    pool = await db.get(PoolV3, pool_id)
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
 
     # Validate and set price limit
     if sqrt_price_limit is None or sqrt_price_limit == Decimal("0"):
@@ -553,8 +461,25 @@ async def swap(
 
     exact_input = amount_specified > 0
 
+    # Circuit breaker: reject swaps on pools with insufficient liquidity
+    MIN_POOL_LIQUIDITY = Decimal("100")
+    if pool.liquidity < MIN_POOL_LIQUIDITY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Pool liquidity too low ({pool.liquidity}). Min required: {MIN_POOL_LIQUIDITY}"
+        )
+
+    # Circuit breaker: limit swap size relative to pool liquidity
+    MAX_SWAP_RATIO = Decimal("0.5")  # max 50% of pool per swap
+    abs_amount = abs(amount_specified)
+    if abs_amount > pool.liquidity * MAX_SWAP_RATIO:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Swap amount too large relative to pool liquidity. Max: {pool.liquidity * MAX_SWAP_RATIO}"
+        )
+
     # Load tick bitmap
-    bm = await _load_tick_bitmap(db, pool.id, pool.tick_spacing)
+    bm = await _load_tick_bitmap(db, pool_id, pool.tick_spacing)
 
     # Initialize swap state
     amount_remaining = amount_specified
@@ -600,15 +525,11 @@ async def swap(
                 tick = get_tick_at_sqrt_ratio(sqrt_price)
             continue
 
-        # Wrap compute_swap_step in try-except to catch overflow errors
         try:
             step = compute_swap_step(sqrt_price, sqrt_ratio_target, liquidity, amount_remaining, pool.fee)
         except ValueError as e:
-            # Circuit breaker triggered - provide helpful error message
-            raise HTTPException(
-                status_code=400,
-                detail=f"Swap calculation failed: {str(e)}. This usually means the swap is too large for the available liquidity."
-            )
+            # Circuit breaker triggered in math layer — stop swap gracefully
+            break
 
         # Update state
         sqrt_price = step.sqrt_ratio_next
@@ -628,7 +549,7 @@ async def swap(
         if sqrt_price == sqrt_price_next:
             if step_initialized:
                 # Load tick and cross it
-                td, ti = await _get_tick_info(db, pool.id, step_tick_next)
+                td, ti = await _get_tick_info(db, pool_id, step_tick_next)
                 liquidity_net = cross_tick(ti,
                     fee_growth_global if zero_for_one else pool.fee_growth_global_0,
                     pool.fee_growth_global_1 if zero_for_one else fee_growth_global,
