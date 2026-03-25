@@ -23,7 +23,7 @@ class Trade(Base):
     order_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     buyer_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     seller_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    pair: Mapped[str] = mapped_column(String(20), nullable=False)
+    pair: Mapped[str] = mapped_column(String(40), nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
     trade_type: Mapped[TradeType] = mapped_column(Enum(TradeType), nullable=False)
