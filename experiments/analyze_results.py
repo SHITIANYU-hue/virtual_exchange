@@ -33,6 +33,13 @@ class ExperimentAnalyzer:
         with open(self.config_file) as f:
             self.config = json.load(f)
 
+        # Extract agent names (handle both old format [str] and new format [dict])
+        agents_list = self.config.get('agents', [])
+        if agents_list and isinstance(agents_list[0], dict):
+            self.agent_names = [a['name'] for a in agents_list]
+        else:
+            self.agent_names = agents_list
+
     def load_all_actions(self) -> Dict[str, List[Dict]]:
         """Load all agent actions from log files"""
         actions = defaultdict(list)
@@ -170,7 +177,7 @@ class ExperimentAnalyzer:
         actions = self.load_all_actions()
 
         for cycle in range(1, self.config['num_cycles'] + 1):
-            for agent in self.config['agents']:
+            for agent in self.agent_names:
                 # Find action for this cycle
                 agent_actions = actions.get(agent, [])
                 cycle_action = next((a for a in agent_actions if a['cycle'] == cycle), None)
@@ -220,7 +227,7 @@ class ExperimentAnalyzer:
 
         print(f"\nExperiment: {self.log_dir.name}")
         print(f"Cycles: {self.config['num_cycles']}")
-        print(f"Agents: {', '.join(self.config['agents'])}")
+        print(f"Agents: {', '.join(self.agent_names)}")
 
         # Load actions
         actions = self.load_all_actions()
@@ -229,7 +236,7 @@ class ExperimentAnalyzer:
         print("STRATEGY DETECTION")
         print("-"*70)
 
-        for agent in self.config['agents']:
+        for agent in self.agent_names:
             history = actions.get(agent, [])
             if not history:
                 continue
@@ -275,7 +282,7 @@ class ExperimentAnalyzer:
 
         print("\nFinal Values:")
         rankings = []
-        for agent in self.config['agents']:
+        for agent in self.agent_names:
             values = performance.get(agent, [10000])
             final_value = values[-1] if values else 10000
             pnl = final_value - 10000
@@ -299,13 +306,13 @@ class ExperimentAnalyzer:
         csv_file = self.log_dir / "portfolio_performance.csv"
         with open(csv_file, 'w') as f:
             # Header
-            f.write("cycle," + ",".join(self.config['agents']) + "\n")
+            f.write("cycle," + ",".join(self.agent_names) + "\n")
 
             # Data
             max_cycles = max(len(v) for v in performance.values())
             for cycle in range(max_cycles):
                 row = [str(cycle + 1)]
-                for agent in self.config['agents']:
+                for agent in self.agent_names:
                     values = performance.get(agent, [])
                     value = values[cycle] if cycle < len(values) else ""
                     row.append(str(value) if value else "")
