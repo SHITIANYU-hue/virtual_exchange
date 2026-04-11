@@ -2,20 +2,6 @@
 
 This directory contains a curated summary of the currently retained experiment runs under `experiments/experiment_logs`.
 
-## What Was Removed
-
-The following runs were deleted because they were effectively unusable:
-
-- `20260320_001159`
-- `20260320_001328`
-- `20260320_152934`
-- `20260320_153138`
-- `20260324_234356`
-- `20260325_094906`
-- `20260325_094940`
-- `20260325_145054`
-- `haiku_whale5B_20260320_000544`
-
 ## How To Read The Metrics
 
 - `naive_final_pnl_usdt`: PnL from the final row of `portfolio_performance.csv`
