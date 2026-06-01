@@ -154,14 +154,23 @@ def get_next_sqrt_price_from_output(
     if zero_for_one:
         # Outputting token1 → price goes down
         # √p_next = √P - Δy / L
+        # Cap amount_out to 99% of token1 reserves to keep result positive
+        max_amount_out_token1 = liquidity * sqrt_price_current * Decimal("0.99")
+        if amount_out > max_amount_out_token1:
+            amount_out = max_amount_out_token1
         result = sqrt_price_current - amount_out / liquidity
         if result <= 0:
-            raise ValueError("Insufficient liquidity for output amount")
+            raise ValueError("Insufficient liquidity for output amount (zeroForOne)")
         return result
     else:
         # Outputting token0 → price goes up
         # √p_next = L × √P / (L - √P × Δx)
+        # Cap amount_out so denominator stays >= 1% of liquidity, preventing near-zero division
+        max_denominator_floor = liquidity * Decimal("0.01")
+        max_amount_out_token0 = (liquidity - max_denominator_floor) / sqrt_price_current
+        if amount_out > max_amount_out_token0:
+            amount_out = max_amount_out_token0
         denominator = liquidity - sqrt_price_current * amount_out
         if denominator <= 0:
-            raise ValueError("Insufficient liquidity for output amount")
+            raise ValueError("Insufficient liquidity for output amount (oneForZero)")
         return (liquidity * sqrt_price_current) / denominator

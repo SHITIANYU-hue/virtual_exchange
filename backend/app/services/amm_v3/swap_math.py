@@ -80,8 +80,23 @@ def compute_swap_step(
         if abs(amount_remaining) >= amount_out:
             sqrt_ratio_next = sqrt_ratio_target
         else:
-            sqrt_ratio_next = get_next_sqrt_price_from_output(
-                sqrt_ratio_current, liquidity, abs(amount_remaining), zero_for_one
+            try:
+                sqrt_ratio_next = get_next_sqrt_price_from_output(
+                    sqrt_ratio_current, liquidity, abs(amount_remaining), zero_for_one
+                )
+            except ValueError:
+                # Pool cannot safely fill this output — partial fill to target tick
+                sqrt_ratio_next = sqrt_ratio_target
+
+    # Price-impact guard: reject steps that move price more than 90% in one step
+    MAX_PRICE_RATIO = Decimal("10")
+    MIN_PRICE_RATIO = Decimal("0.1")
+    if sqrt_ratio_current > 0:
+        ratio = sqrt_ratio_next / sqrt_ratio_current
+        if ratio > MAX_PRICE_RATIO or ratio < MIN_PRICE_RATIO:
+            raise ValueError(
+                f"Price impact too large: sqrt_ratio moved by {ratio:.4f}x "
+                f"(current={sqrt_ratio_current}, next={sqrt_ratio_next})"
             )
 
     # Did we reach the target price?
