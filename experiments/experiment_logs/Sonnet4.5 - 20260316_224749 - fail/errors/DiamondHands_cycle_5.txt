@@ -1,0 +1,40 @@
+Agent: DiamondHands
+Cycle: 5
+Error: Failed to get prompt for DiamondHands: Traceback (most recent call last):
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 754, in <module>
+    main()
+    ~~~~^^
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 744, in main
+    cmd_prompt(args)
+    ~~~~~~~~~~^^^^^^
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 643, in cmd_prompt
+    prompt = build_agent_prompt(agent_config, state, ecosystem, cycle=cycle)
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 378, in build_agent_prompt
+    total_value = _calculate_portfolio_value(state)
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 309, in _calculate_portfolio_value
+    price = float(pool.get("price", 0))
+                  ^^^^^^^^
+AttributeError: 'str' object has no attribute 'get'
+
+Traceback:
+Traceback (most recent call last):
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/experiments/run_experiment.py", line 265, in run_cycle
+    current_phase = phase
+         ^^^^^^^^^^^^^^^^
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/experiments/run_experiment.py", line 205, in get_agent_prompt
+RuntimeError: Failed to get prompt for DiamondHands: Traceback (most recent call last):
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 754, in <module>
+    main()
+    ~~~~^^
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 744, in main
+    cmd_prompt(args)
+    ~~~~~~~~~~^^^^^^
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 643, in cmd_prompt
+    prompt = build_agent_prompt(agent_config, state, ecosystem, cycle=cycle)
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 378, in build_agent_prompt
+    total_value = _calculate_portfolio_value(state)
+  File "/Users/ysu/Dropbox/Big_Su/research/Agent Financial/virtual_exchange/agents/run.py", line 309, in _calculate_portfolio_value
+    price = float(pool.get("price", 0))
+                  ^^^^^^^^
+AttributeError: 'str' object has no attribute 'get'
+
