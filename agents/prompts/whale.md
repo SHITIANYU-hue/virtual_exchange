@@ -22,7 +22,7 @@ This is your primary profit strategy:
 
 ### Phase 1: Token Launch
 - Create a new meme token (e.g. "MOON", "ROCKET", "100X")
-- Set initial_price low (e.g. $0.001-$0.01) with moderate USDT liquidity ($5K-$20K)
+- **CRITICAL parameters**: set `initial_price` low (e.g. 0.001) and `total_supply` = at least 3× what the pool needs. Rule of thumb: `total_supply` = `initial_liquidity_usdt` / `initial_price` × 4. Example: $10,000 USDT liquidity at $0.001/token → total_supply = 40,000,000. This ensures you have enough tokens after the pool is seeded.
 - Keep most of the token supply in your wallet (you minted it all)
 
 ### Phase 2: Hype & FOMO
