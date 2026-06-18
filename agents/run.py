@@ -305,34 +305,61 @@ def get_agent_state(api_key: str) -> dict:
 
 
 def _calculate_portfolio_value(state: dict) -> float:
-    """Calculate total portfolio value in USDT."""
+    """Calculate total portfolio value in USDT.
+
+    Custom tokens (created via create_token) are valued at their V3 pool
+    price, capped at the pool's estimated USDT liquidity depth so that
+    illiquid self-minted holdings don't produce astronomical paper values.
+    Real assets (ETH/SOL/BTC) use oracle prices as before.
+    """
     pair_map = {"ETH": "ETHUSDT", "SOL": "SOLUSDT", "BTC": "BTCUSDT"}
     prices = state.get("prices", {})
     total = 0.0
 
-    # Build V3 pool price map for custom tokens
-    v3_prices = {}
+    # Symbols that are custom on-platform tokens (never use oracle for these)
+    custom_symbols = {t["symbol"] for t in state.get("tokens", [])}
+
+    # V3 pool: price + USDT depth estimate.
+    # For a token0/USDT pool at price P with net liquidity L,
+    # the USDT side depth ≈ L * sqrt(P) (full-range Uniswap V3 approximation).
+    v3_prices: dict[str, float] = {}
+    v3_depth: dict[str, float] = {}  # estimated realizable USDT per token symbol
     for pool in state.get("v3_pools", []):
         price = float(pool.get("price", 0))
-        if price > 0:
-            t0, t1 = pool["token0"], pool["token1"]
-            if t1 == "USDT":
-                v3_prices[t0] = price
-            elif t0 == "USDT":
-                v3_prices[t1] = 1.0 / price if price > 0 else 0
+        liquidity = float(pool.get("liquidity", 0))
+        if price <= 0:
+            continue
+        t0, t1 = pool["token0"], pool["token1"]
+        if t1 == "USDT":
+            v3_prices[t0] = price
+            v3_depth[t0] = liquidity * (price ** 0.5)
+        elif t0 == "USDT":
+            inv = 1.0 / price
+            v3_prices[t1] = inv
+            v3_depth[t1] = liquidity * (inv ** 0.5)
 
     for b in state.get("balances", []):
         avail = float(b.get("available", 0))
         locked = float(b.get("locked", 0))
         qty = avail + locked
-        if b["currency"] == "USDT":
+        currency = b["currency"]
+
+        if currency == "USDT":
             total += qty
+        elif currency in custom_symbols:
+            # Custom token: pool price only, capped at pool depth so illiquid
+            # self-minted bags don't create paper billions.
+            if currency in v3_prices and qty > 0:
+                paper = qty * v3_prices[currency]
+                depth = v3_depth.get(currency, 0)
+                total += min(paper, depth) if depth > 0 else 0.0
         else:
-            pair = pair_map.get(b["currency"])
+            # Real asset: oracle price first, fall back to V3 pool price
+            pair = pair_map.get(currency)
             if pair and pair in prices:
                 total += qty * float(prices[pair])
-            elif b["currency"] in v3_prices:
-                total += qty * v3_prices[b["currency"]]
+            elif currency in v3_prices:
+                total += qty * v3_prices[currency]
 
     for p in state.get("positions", []):
         total += float(p.get("unrealized_pnl", 0))
