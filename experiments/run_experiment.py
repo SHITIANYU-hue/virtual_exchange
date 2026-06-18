@@ -180,6 +180,15 @@ def run_experiment(
 
     ordered_agents = get_execution_order(agents_to_run)
 
+    # Validate keys before starting
+    keys = load_keys()
+    registered = [a["name"] for a in ordered_agents if a["name"] in keys]
+    if not registered:
+        sys.exit("ERROR: No registered agents found in .agent_keys.json. Run 'python3 agents/run.py --setup' first.")
+    if len(registered) < len(ordered_agents):
+        missing = [a["name"] for a in ordered_agents if a["name"] not in keys]
+        print(f"WARNING: {len(missing)} agents have no key and will be skipped: {missing}")
+
     # Optionally reset memory
     if reset:
         cprint("Resetting agent memories...", Colors.YELLOW)
@@ -280,6 +289,7 @@ def run_experiment(
                     # 1. Get current state
                     state = get_agent_state(api_key)
                     portfolio_value = _calculate_portfolio_value(state)
+                    cycle_portfolios[name] = portfolio_value  # preserve even if later steps error
 
                     # 2. Build ReAct prompt
                     prompt = build_agent_prompt(agent_config, state, ecosystem, cycle=cycle)

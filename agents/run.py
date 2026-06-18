@@ -29,10 +29,16 @@ import httpx
 BASE_URL = os.environ.get("AGENT_METAVERSE_BASE_URL", "http://localhost:8000")
 AGENTS_DIR = Path(__file__).parent
 ECOSYSTEM_FILE = AGENTS_DIR / "ecosystem.json"
-KEYS_FILE = AGENTS_DIR / ".agent_keys.json"
+# Keys file lives outside Dropbox so cloud sync can't overwrite it.
+# Override with AGENT_METAVERSE_KEYS_FILE env var if needed.
+KEYS_FILE = Path(os.environ.get(
+    "AGENT_METAVERSE_KEYS_FILE",
+    Path.home() / ".config" / "agent-metaverse" / "keys.json",
+))
 MEMORY_DIR = AGENTS_DIR / "memory"
 
-# Ensure memory directory exists
+# Ensure required directories exist
+KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
 MEMORY_DIR.mkdir(exist_ok=True)
 
 # ──────────────────────────────────────────────
@@ -246,7 +252,8 @@ def load_ecosystem() -> dict:
 def load_keys() -> dict:
     if KEYS_FILE.exists():
         with open(KEYS_FILE) as f:
-            return json.load(f)
+            content = f.read().strip()
+            return json.loads(content) if content else {}
     return {}
 
 
@@ -568,6 +575,25 @@ def execute_trades(agent_name: str, api_key: str, action: dict):
                 resp = httpx.post(f"{BASE_URL}/api/v3/collect-fees", headers=headers, json={
                     "position_id": trade["position_id"],
                 }, timeout=30.0)
+            elif act == "mint":
+                # LLMs sometimes use "mint" for new token creation; map to create_token when fields match.
+                # Minting existing oracle assets (BTC/SOL/ETH) is not supported.
+                if "symbol" in trade and "total_supply" in trade:
+                    resp = httpx.post(f"{BASE_URL}/api/token/create", headers=headers, json={
+                        "symbol": trade["symbol"],
+                        "name": trade.get("name", trade["symbol"]),
+                        "total_supply": trade["total_supply"],
+                        "initial_price": trade["initial_price"],
+                        "initial_liquidity_usdt": trade["initial_liquidity_usdt"],
+                        "fee_tier": trade.get("fee_tier", 3000),
+                    }, timeout=30.0)
+                else:
+                    print(f"    [skip] mint: cannot mint existing oracle asset '{trade.get('currency', '?')}'; use buy_spot instead")
+                    continue
+            elif act == "create_pool":
+                # No standalone create_pool endpoint; pools are created via create_token (new meme tokens only).
+                print(f"    [skip] create_pool: no standalone endpoint; use create_token to launch a new token with a pool")
+                continue
             else:
                 print(f"    [skip] Unknown action: {act}")
                 continue
