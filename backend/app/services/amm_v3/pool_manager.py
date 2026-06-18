@@ -500,7 +500,14 @@ async def swap(
 
         # Compute swap step
         if liquidity == 0:
-            # No liquidity — skip to next tick
+            # No active liquidity in this range.
+            if not step_initialized:
+                # No initialized tick ahead in this direction — stop traversal.
+                # Without this break the loop races to MAX/MIN_TICK through empty
+                # tick space (100 iterations), corrupting pool.sqrt_price at zero cost.
+                break
+            # An initialized tick exists ahead; jump to it and let the tick-cross
+            # logic below load its liquidity_net on the next iteration.
             sqrt_price = sqrt_ratio_target
             if sqrt_price_next == sqrt_ratio_target:
                 tick = step_tick_next - 1 if zero_for_one else step_tick_next
@@ -559,6 +566,15 @@ async def swap(
     output_token = pool.token1 if zero_for_one else pool.token0
     input_amount = abs(amount0 if zero_for_one else amount1)
     output_amount = abs(amount1 if zero_for_one else amount0)
+
+    # Guard: if no tokens were exchanged the pool had no active liquidity.
+    # Without this check, a swap through 100 empty ticks (MAX_ITERATIONS)
+    # would corrupt pool.sqrt_price to an extreme value at zero cost.
+    if output_amount == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Swap yields no output: pool has insufficient active liquidity in this price range",
+        )
 
     # Deduct input
     input_bal = await _get_or_create_balance(db, user_id, input_token)

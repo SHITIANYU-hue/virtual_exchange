@@ -124,6 +124,15 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     keys = load_keys()
     ordered_agents = get_execution_order(ecosystem["agents"])
 
+    # Validate keys before starting
+    keys = load_keys()
+    registered = [a["name"] for a in ordered_agents if a["name"] in keys]
+    if not registered:
+        sys.exit("ERROR: No registered agents found in .agent_keys.json. Run 'python3 agents/run.py --setup' first.")
+    if len(registered) < len(ordered_agents):
+        missing = [a["name"] for a in ordered_agents if a["name"] not in keys]
+        print(f"WARNING: {len(missing)} agents have no key and will be skipped: {missing}")
+
     # Optionally reset memory
     if reset:
         print("Resetting agent memories...")
@@ -194,6 +203,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                 # 1. Get current state
                 state = get_agent_state(api_key)
                 portfolio_value = _calculate_portfolio_value(state)
+                cycle_portfolios[name] = portfolio_value  # preserve even if later steps error
 
                 # 2. Build ReAct prompt
                 prompt = build_agent_prompt(agent_config, state, ecosystem, cycle=cycle)
@@ -217,6 +227,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                     print(f"PARSE ERROR: {action['error']}")
                     with open(exp_dir / "errors" / f"{name}_cycle_{cycle}.txt", "w") as f:
                         f.write(raw_response)
+                    # cycle_portfolios[name] already set above; don't overwrite with 0
                     continue
 
                 # Print ReAct summary
@@ -253,7 +264,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                 print(f"  [{name}] ERROR: {e}")
                 with open(exp_dir / "errors" / f"{name}_cycle_{cycle}.txt", "w") as f:
                     f.write(str(e))
-                cycle_portfolios[name] = 0
+                # cycle_portfolios[name] set at state-fetch step; only fall back to 0 if that also failed
 
         # Save cycle portfolio values
         with open(csv_path, "a", newline="") as f:
