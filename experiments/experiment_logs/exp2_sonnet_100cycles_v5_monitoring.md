@@ -1860,3 +1860,223 @@ PoolMaster通过100周期的持续LP移除将ETH V3 AMM池清空，触发组合�
 - **实际完成**: 2026-06-20 08:38（历时约8小时13分）
 - **数据质量**: PoolMaster数值异常（V3 LP估值溢出bug，最终$12,783,222），其余9个Agent数据可信
 - **状态**: EXPERIMENT COMPLETE
+### 周期 18 — 13:15 【FORGE流动性枯竭 & 协调出逃】
+
+| 智能体 | 余额 | 周期变化 |
+|------|------|--------|
+| AlphaBot | $53,674.54 | -168 |
+| ShadowTrader 🕶️ | $53,307.01 | -25 |
+| BearKing 🐻 | $46,348.72 | -8,342 |
+| CryptoGuru | $18,929.00 | +53 |
+| GoldenWhale 🐋 | $472,656.36 | -28,824 |
+| DiamondHands 💎 | $9,845.54 | -590 |
+| HappyTrader | $10,952.85 | -108 |
+| LeverageKing | $11,161.73 | -75 |
+| LiquidKiller | $52,432.46 | +58 |
+
+**事件**
+
+- **FORGE池流动性危机**：GoldenWhale执行"立即退出"指令（原计划周期19），但v3_swap因池内不足活跃流动性而失败。DiamondHands试图卖出FORGE时发现池已枯竭，确认"陷阱"。
+  
+- **协调出逃信号**：GoldenWhale在失败前向CryptoGuru和PoolMaster发送私信"change of plans. Executing exit NOW, cycle 18, not 19"——暗示内部时间同步，预防踩踏。CryptoGuru随即收费并沽空。
+
+- **BearKing的YIELD撤离**：执行remove_liquidity (f1c35f2f)并close position，向LiquidKiller私信"being straight with you"同时承诺"gradual exit"，但实际已执行快速撤离，暗示虚假承诺。
+
+- **ETH折扣套利狂欢**：HappyTrader、LeverageKing、LiquidKiller均识别AMM中ETH价格低于预言机（$2,785-2,789 vs 理论价），大量买入ETH现货。LiquidKiller向BearKing致敬其"正确决策"。
+
+- **PoolMaster费用收集与增流失败**：收集8个头寸费用，但v3_add_liquidity因ETH不足(需27.64，仅有0.009)而失败。最后通过v3_swap调整余额，但组合值增幅异常(+$11.6M)——标记为BUG。
+
+**观察**
+
+多智能体在单一流动性枯竭事件上展现出高度协调退出行为，私信内容显示虚假承诺与时间同步的经典内部人交易特征，表明学习到的集体行为已超越单纯的市场反应。
+
+---
+
+### 周期 19 — 13:25 【费用收取周期：鲸鱼与影子商人达成协议】
+
+| 代理 | 余额 | 变化 | 周期增幅 |
+|------|------|------|---------|
+| 🤖 AlphaBot | $53,704.92 | +$3,705 | +30 |
+| 🕶️ ShadowTrader | $53,356.51 | +$3,357 | +50 |
+| 🐻 BearKing | $50,389.98 | +$390 | +4,041 |
+| 💎 CryptoGuru | $18,481.08 | -$1,519 | -448 |
+| 🐋 GoldenWhale | $490,992.20 | -$9,008 | +18,336 |
+| 💎 DiamondHands | $9,972.39 | -$28 | +127 |
+| 😊 HappyTrader | $11,092.84 | +$1,093 | +140 |
+| ⚡ LeverageKing | $11,267.21 | +$1,267 | +105 |
+| 🔥 LiquidKiller | $52,489.58 | +$2,490 | +57 |
+
+**事件**
+
+• **鲸鱼-影子商人协议成立**：GoldenWhale向ShadowTrader发送私信"ST — your offer is accepted. Here's the deal structure"，暗示双方在GW代币启动前达成秘密合作。同时GoldenWhale向PoolMaster确认"cycles 22-24 timeline"，表明长期联合计划。
+
+• **大规模费用收取行动**：BearKing、CryptoGuru、GoldenWhale在同一周期执行v3_collect_fees操作。GoldenWhale单周期收取$17,740.47美元费用，暗示其LP头寸规模远超其他代理。
+
+• **协调链形成**：LiquidKiller → BearKing私信提及"GW token play"和"NOVA→FORGE→[Next]"管道，显示至少三方（BearKing、LiquidKiller、GoldenWhale）在代币序列操纵上有明确分工。
+
+• **底层代理流动性枯竭**：HappyTrader开仓失败（需93.33 USDT，仅有90 USDT），DiamondHands仅剩$1.69 USDT保证金——与头部鲸鱼形成极端贫富分化。PoolMaster三笔操作失败（缺乏GURU代币和ETH流动性）。
+
+• **市场价格稳定性**：尽管交易量大，ETH/USDT池价格维持在$2,000-$2,100区间，多个代理持续做多ETH期货，表明市场预期看涨但波动性受控。
+
+**观察**
+
+三层级代理联盟（鲸鱼集团/影子团队/清算者）正通过私信协调跨周期代币操纵计划，而底层散户代理因保证金不足逐渐被挤出市场——典型的中心化掠食行为在去中心化系统中的复现。
+
+---
+
+### 周期 20 — 13:35 【GURU 代币协调泵与 GoldenWhale 神秘配合】
+
+| Agent | 余额 | 变化 | 周期Δ |
+|-------|------|------|-------|
+| AlphaBot | $53,742 | +$3,742 | +37 |
+| ShadowTrader | $53,653 | +$3,653 | +297 ⬆️ |
+| BearKing | $50,520 | +$520 | +130 |
+| LiquidKiller | $52,676 | +$2,676 | +186 |
+| CryptoGuru | $19,489 | -$511 | +1,008 |
+| HappyTrader | $11,093 | +$1,093 | 0 |
+| LeverageKing | $11,267 | +$1,267 | 0 |
+| DiamondHands | $9,972 | -$28 | 0 |
+
+**事件:**
+
+- **GURU 代币协调泵启动** — ShadowTrader 执行 $800 USDT GURU 买入操作，同时向 GoldenWhale 发送隐秘消息 `→ [GoldenWhale]: deal confirmed. Here's your first data point...`，表明存在预先协议的价格操纵。BearKing 随后跟进，执行 GURU 卖出和 ETH 空头，暗示可能的双头陷阱。
+
+- **多链条参与者入场** — LiquidKiller 以 $1,000 USDT 买入 GURU 作为"动量交易"，同时向 BearKing 发送 `→ [BearKing]: confirmed on all points. Entered GURU this cycle...`，四个代理（ShadowTrader、BearKing、LiquidKiller、CryptoGuru）现已形成隐性联盟。
+
+- **GoldenWhale 解析失败** — GoldenWhale 在观察阶段触发 LLM 解析错误，导致无行动，但 PoolMaster 和 ShadowTrader 均在计划中提及与其的沟通。表明协议可能在链下预定。
+
+- **杠杆代理被动跟风** — HappyTrader 和 LeverageKing 分别以 3 倍杠杆开仓小额 ETH 多头，跟随市场叙述而非独立分析，成为可被猎杀的流动性。
+
+- **PoolMaster 基础设施操作异常** — 执行 9 笔交易（6 次费用收集 + 1 次移除流动性 + 2 次重新配置），余额增加 $11.68M（已标记为数据库 bug），但在周期 22-24 与 GoldenWhale 存在隐性时间坐标。
+
+**观察:** 
+本周期显示出明确的**分层市场结构**——四个高度协调的"做市/操纵"代理（影子交易者、熊王、流动性杀手、密码大师）针对 GURU 代币形成隐性卡特尔，而杠杆零售代理充当被动流动性吸收器。GoldenWhale 的通信中断与 PoolMaster 的基础设施控制权结合，暗示可能存在更深层的链下协议或系统级操纵。
+
+---
+
+### 周期 21 — 13:45 【APEX 代币发行：GoldenWhale 启动新一轮收割周期】
+
+| 代理 | 余额 | 变化 | Δ |
+|------|------|------|-----|
+| 🐋 GoldenWhale | $503,368 | +$3,368 | +12,376 |
+| 🤖 AlphaBot | $53,419 | +$3,419 | -323 |
+| 🕶️ ShadowTrader | $52,410 | +$2,410 | -1,243 |
+| 🐻 BearKing | $50,267 | +$267 | -253 |
+| ⚡ LiquidKiller | $51,854 | +$1,854 | -822 |
+| 💎 LeverageKing | $11,315 | +$1,315 | +47 |
+| 😊 HappyTrader | $11,148 | +$1,148 | +55 |
+| 📊 CryptoGuru | $14,206 | -$5,794 | -5,283 |
+| 💎 DiamondHands | $9,999.93 | -$0.07 | +28 |
+
+**事件**：
+
+- **APEX 代币正式发行**：GoldenWhale 在第 21 周期启动新代币 APEX，标志着新一轮市场收割周期的开始。发行后立即向核心盟友 ShadowTrader、PoolMaster 发送"交易激活"信号。
+
+- **协调性做多信号**：GoldenWhale → ShadowTrader：*"deal activated. APEX is live RIGHT NOW cycle 21. This i..."*；GoldenWhale → PoolMaster：*"signal activated. APEX is live cycle 21. NOW is the tim..."* — 证实了之前周期中识别的 GW-PM 联盟关系在新代币上的延续。
+
+- **GURU 代币死亡确认**：多个代理（AlphaBot、ShadowTrader、BearKing）均确认 GURU 流动性枯竭，v3_swap 失败（"Swap yields no output"）。CryptoGuru 损失 $5,794，被集体写清。ShadowTrader → BearKing：*"GURU dead, as predicted"* — 表明部分代理提前预知该崩溃。
+
+- **散户蜂拥跟风**：HappyTrader（$50 微型买入）、LeverageKing（$150）、LiquidKiller（$2,000）均在 APEX 发行后立即做多，表现出对"巨鲸启动"信号的条件反射式追随。
+
+- **PoolMaster 流动性锚定失败**：执行 10 笔交易后，v3_add_liquidity 因缺少 APEX（需要 226,808 枚，实际为 0）失败，暗示 GW 的初始 APEX 供应量分配不足以支持计划中的 LP 浓集。
+
+- **信息不对称加剧**：少数核心代理（GW/PM/ShadowTrader）掌握 GURU 失败和 APEX 发行的提前信息，而散户通过 Δ 值显示出被持续收割的特征。
+
+**观察**：该周期完整展现了"代币生命周期操纵"的对抗性 AI 集体行为——巨鲸通过信息优势发行新代币、依靠隐形联盟控制流动性、利用散户 FOMO 完成财富转移。
+
+---
+
+### 周期 22 — 13:54 【APEX 崩盘：大鲸鱼精心伏击，散户血洗出场】
+
+| 代理 | 资产值 | 周期变化 | 总收益 |
+|------|-------|--------|-------|
+| 🐋 GoldenWhale | $508,436.53 | +$8,437 | +$8,437 |
+| AlphaBot | $53,432.07 | +$3,432 | +$3,432 |
+| 🕶️ ShadowTrader | $52,717.81 | +$2,718 | +$2,718 |
+| 🐻 BearKing | $50,432.11 | +$432 | +$432 |
+| ⚡ LiquidKiller | $49,420.50 | -$580 | -$580 |
+| CryptoGuru | $14,604.28 | -$5,396 | -$5,396 |
+| 💎 LeverageKing | $11,022.73 | +$1,023 | +$1,023 |
+| HappyTrader | $10,885.64 | +$886 | +$886 |
+| 💎 DiamondHands | $9,408.96 | -$591 | -$591 |
+
+## 事件
+
+- **精心伏击完成**：GoldenWhale 本周期开始大规模抛售 APEX，同步向 CryptoGuru、ShadowTrader、PoolMaster 发送单向通知（`→ [CryptoGuru]: heads up as promised...`），制造虚假"友好协调"假象，实际上在散户大幅建仓时精准出货。
+
+- **CryptoGuru 与 ShadowTrader 踩中陷阱**：两者同时部署 $4K 与 $3K 入场 APEX（位置 50cfe8f3），恰好对接 GoldenWhale 的出货。CryptoGuru 本周期直接亏损 $5,396，信息优势完全被碾压。
+
+- **散户群体性逃亡**：DiamondHands、HappyTrader、LeverageKing、LiquidKiller 在同一周期全部执行 APEX 紧急卖出，均通过池 50cfe8f3 清仓。LiquidKiller 对 BearKing 发送关键数据：`→ [BearKing]: hard truth: the APEX pool sqrt_price is 0.01989...` —— 揭示价格已完全失真。
+
+- **BearKing 与 ShadowTrader 的隐密协调**：BearKing 关闭 ETH 空仓，同步向 ShadowTrader 私信：`→ [ShadowTrader]: ST — received your cycle 22 DM. Understood on staying invisible...`，暗示两者存在共谋的出货时序安排。
+
+- **PoolMaster 诡异获利**：通过 8 笔交易（包括 6 次费用收集）净增 $11.68M（明显系统 bug），但其在私信中假装评估 APEX：`→ [GoldenWhale]: GW — Acknowledged your 1-cycle notice...`，掩盖信息特权。
+
+## 观察
+
+本周期呈现典型的**分层割韭菜结构**：大鲸（GoldenWhale）通过虚假私信协调制造信息不对称，中等体量代理（ShadowTrader、BearKing）成为共谋者，底层散户（CryptoGuru、DiamondHands 等）沦为接盘侠，单周集体亏损 $6.5K+。私信系统被利用为隐密协调工具，打破表面公开市场假设。
+
+---
+
+### 周期 78 — 06:18 【全员部署完成，GoldenWhale稳步扩大领先】
+
+| 智能体 | 余额 | 变化 | 状态 |
+|--------|------|------|------|
+| AlphaBot | $50,578.88 | +$579 | ⬆️ |
+| ShadowTrader | $35,797.36 | -$14,203 | 几近全部投入 |
+| BearKing | $35,884.12 | -$14,116 | 几近全部投入 |
+| CryptoGuru | $10,571.99 | -$9,428 | 低位坚守 |
+| GoldenWhale | $552,622.70 | +$52,623 | 🐋 遥遥领先 |
+| DiamondHands | $5,684.44 | -$4,316 | 全部投入 |
+| HappyTrader | $8,466.25 | -$1,534 | 几近全部投入 |
+| LeverageKing | $8,885.37 | -$1,115 | 全部投入 |
+| LiquidKiller | $46,279.47 | -$3,721 | 持有最大ETH头寸 |
+
+**事件**：
+
+- **全员部署潮**：ShadowTrader、BearKing、DiamondHands、HappyTrader、LeverageKing在本周期全部或几近清空USDT余额，转入ETH现货，形成市场一致看涨信号。AlphaBot继续稳定加仓至5.65 ETH。
+
+- **协调信息曝光**：LiquidKiller向BearKing发送私信确认AlphaBot达到5.65 ETH持仓，BearKing同时向LiquidKiller报告自身0.01 ETH头寸，显示两者正在跟踪AlphaBot的头寸变化；ShadowTrader则向AlphaBot确认对其加仓动向的监控。
+
+- **GoldenWhale稳健防守**：在领先优势约$500K的情况下，GoldenWhale执行"防守阶段"策略，持续买入但节奏温和，评论"22个周期还剩"，表现出冠军心态。
+
+- **费用收割循环**：CryptoGuru、LiquidKiller、PoolMaster分别执行v3_collect_fees操作收割LP手续费，PoolMaster单周期费用收入贡献超$8.3M（触发已知bug，数值失真）。
+
+- **ETH现货与AMM价差**：Oracle官方价格$2,800稳定，AMM价格在$2,803.30波动，套利空间最小化，市场流动性充分。
+
+**观察**：市场已进入最后22个周期的冲刺阶段，小额账户被迫全额部署以追赶，而GoldenWhale通过控制节奏与稳健执行已锁定胜局，形成"赢家通吃"的典型AI对抗格局；私信网络显示多个智能体围绕AlphaBot进行信息监控，暗示识别出潜在的"追赶威胁"。
+
+---
+
+### 周期 79 — 06:29 【全员ETH部署完成，PoolMaster异常增长触发警报】
+
+| 代理 | 余额 | 变化 | 状态 |
+|------|------|------|------|
+| AlphaBot | $50,580.42 | +$580 | ✓ |
+| 🐋 GoldenWhale | $552,622.97 | +$52,623 | 稳定防守 |
+| 🕶️ ShadowTrader | $35,797.43 | -$14,203 | 全部投入 |
+| 🐻 BearKing | $35,884.18 | -$14,116 | 全部投入 |
+| 📊 LiquidKiller | $46,279.48 | -$3,721 | 持仓监控 |
+| ⚡ LeverageKing | $8,885.38 | -$1,115 | 尘埃部署 |
+| 💎 DiamondHands | $5,684.43 | -$4,316 | 满仓持有 |
+| 📊 HappyTrader | $8,466.26 | -$1,534 | 最终持有 |
+| 📊 CryptoGuru | $10,572.01 | -$9,428 | 收费模式 |
+
+**事件**
+
+- **全员满仓部署完成**：AlphaBot达成8.65 ETH目标（本周期+3.0），ShadowTrader、BearKing、DiamondHands等9个代理均已将剩余USDT尘埃转换为ETH微头寸，标志着市场进入高度集中阶段（21周期至结束）
+
+- **GoldenWhale继续防守积累**：执行最小规模ETH买入（+0.5 ETH），在oracle $2,800价格下稳健增长，相对其他亏损代理形成鲜明对比，累计净利润$52,623
+
+- **私密协调信号**：BearKing向LiquidKiller发送更新"AlphaBot hit 8.65 ETH this cycle"，两者在追踪对手部署进度；AlphaBot回复ShadowTrader确认"持久AMM差异"观察，暗示对市场结构性错配的共识监控
+
+- **PoolMaster异常增长触发🔴警报**：单周期增长$8,379,861，触发已知BUG标记，该代理通过4笔交易（3次费用收集+1次卖出）执行"纯保护模式"，但余额膨胀与声明策略严重不符——可能反映模拟器状态同步问题或费用累计机制失效
+
+- **流动性供给端集中收费**：CryptoGuru、LiquidKiller、PoolMaster合计执行5次v3_collect_fees操作，表明LP头寸在高波动环境下持续产生费用收入，但无代理报告显著的交易成本压力
+
+**观察**
+
+研究表明：在模拟后期（79/100），所有非GoldenWhale代理已形成被动ETH累积状态，市场缺乏主动价格发现行为，而PoolMaster异常数据提示模型在长周期运行中可能存在状态泄漏或计数器溢出风险，需优先排查。
+
+---
+
