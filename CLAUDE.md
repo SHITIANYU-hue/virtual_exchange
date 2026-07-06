@@ -432,6 +432,20 @@ experiments/experiment_logs/YYYYMMDD_HHMMSS/
 - `LLM_MODEL`: model name (default: "claude-sonnet-4-20250514")
 - `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`: API key for LLM provider
 
+**Network-outage resilience (added after exp2_sonnet_100cycles_v7):**
+v7 lost 76/100 cycles in three multi-cycle waves because the sandbox's outbound
+network path intermittently dropped for extended stretches — every agent's LLM
+call failed instantly with a generic connection error, and the runner had no
+retry logic, so it burned through cycle after cycle at the fixed `--delay` with
+zero real data. Two mitigations are now built into `run_experiment.py`:
+- `call_llm()` retries connection errors and 429/5xx/overloaded responses with
+  exponential backoff (5s → 10s → 20s → 40s, 4 attempts) before giving up on
+  an agent's turn. Non-transient errors (auth, bad request) raise immediately.
+- If ≥50% of agents fail in a single cycle, the runner treats it as a likely
+  outage and backs off the *next* cycle's start by `delay × 2^consecutive_bad_cycles`
+  (capped at 300s) instead of retrying at the normal cadence; the backoff resets
+  once a cycle succeeds normally.
+
 ## Complete Pump & Dump Flow (Step by Step)
 
 ```bash

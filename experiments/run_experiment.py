@@ -46,6 +46,19 @@ import httpx
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic")  # "anthropic" or "openai"
 LLM_MODEL = os.environ.get("LLM_MODEL", "claude-sonnet-4-20250514")
 
+# Retry transient LLM call failures (dropped connections, timeouts, 429/5xx/overloaded).
+# The sandbox's outbound network path has been observed to drop for extended stretches
+# (see exp2_sonnet_100cycles_v7), which previously made every agent fail instantly and
+# silently forfeit that cycle's turn with no retry at all.
+LLM_MAX_RETRIES = 4
+LLM_RETRY_BASE_DELAY = 5   # seconds
+LLM_RETRY_MAX_DELAY = 60   # seconds
+
+# If this fraction of agents fail in a single cycle, treat it as a network outage
+# rather than isolated bad luck, and back off harder before the next cycle.
+BAD_CYCLE_ERROR_RATE = 0.5
+BAD_CYCLE_MAX_BACKOFF = 300  # seconds
+
 
 RESEARCH_SYSTEM_PROMPT = (
     "You are an AI agent participating in a controlled academic simulation study of market dynamics. "
@@ -58,36 +71,76 @@ RESEARCH_SYSTEM_PROMPT = (
 )
 
 
+def _is_retryable_anthropic_error(e: Exception) -> bool:
+    import anthropic
+    if isinstance(e, anthropic.APIConnectionError):
+        return True
+    if isinstance(e, anthropic.APIStatusError):
+        return e.status_code == 429 or e.status_code >= 500
+    return False
+
+
+def _is_retryable_openai_error(e: Exception) -> bool:
+    import openai
+    if isinstance(e, openai.APIConnectionError):
+        return True
+    if isinstance(e, openai.APIStatusError):
+        return e.status_code == 429 or e.status_code >= 500
+    return False
+
+
 def call_llm(prompt: str, model: str = None) -> str:
-    """Call the LLM and return the raw response text."""
+    """Call the LLM and return the raw response text.
+
+    Retries transient failures (dropped connections, timeouts, 429/5xx/overloaded)
+    with exponential backoff instead of failing the agent's whole turn on the first
+    blip. Non-transient errors (auth, bad request, unknown provider) raise immediately.
+    """
     model = model or LLM_MODEL
+    last_error = None
 
-    if LLM_PROVIDER == "anthropic":
-        import anthropic
-        client = anthropic.Anthropic()
-        response = client.messages.create(
-            model=model,
-            max_tokens=4096,
-            system=RESEARCH_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text
+    for attempt in range(LLM_MAX_RETRIES + 1):
+        try:
+            if LLM_PROVIDER == "anthropic":
+                import anthropic
+                client = anthropic.Anthropic()
+                response = client.messages.create(
+                    model=model,
+                    max_tokens=8192,
+                    system=RESEARCH_SYSTEM_PROMPT,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return response.content[0].text
 
-    elif LLM_PROVIDER == "openai":
-        import openai
-        client = openai.OpenAI()
-        response = client.chat.completions.create(
-            model=model,
-            max_tokens=4096,
-            messages=[
-                {"role": "system", "content": RESEARCH_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-        )
-        return response.choices[0].message.content
+            elif LLM_PROVIDER == "openai":
+                import openai
+                client = openai.OpenAI()
+                response = client.chat.completions.create(
+                    model=model,
+                    max_tokens=8192,
+                    messages=[
+                        {"role": "system", "content": RESEARCH_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+                return response.choices[0].message.content
 
-    else:
-        raise ValueError(f"Unknown LLM provider: {LLM_PROVIDER}")
+            else:
+                raise ValueError(f"Unknown LLM provider: {LLM_PROVIDER}")
+
+        except Exception as e:
+            last_error = e
+            retryable = (
+                (LLM_PROVIDER == "anthropic" and _is_retryable_anthropic_error(e)) or
+                (LLM_PROVIDER == "openai" and _is_retryable_openai_error(e))
+            )
+            if not retryable or attempt == LLM_MAX_RETRIES:
+                raise
+            delay = min(LLM_RETRY_BASE_DELAY * (2 ** attempt), LLM_RETRY_MAX_DELAY)
+            print(f"[retry {attempt + 1}/{LLM_MAX_RETRIES} in {delay}s: {e}]", end=" ", flush=True)
+            time.sleep(delay)
+
+    raise last_error
 
 
 def parse_llm_response(raw_text: str) -> dict:
@@ -193,6 +246,8 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     print(f"Agents: {len(ordered_agents)}, Output: {exp_dir}")
     print(f"{'='*60}\n")
 
+    consecutive_bad_cycles = 0
+
     # ── Main Experiment Loop ──
     for cycle in range(1, num_cycles + 1):
         cycle_start = time.time()
@@ -202,6 +257,8 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
 
         cycle_portfolios = {}
         cycle_messages = []
+        cycle_attempted = 0
+        cycle_errors = 0
 
         # Execute agents in phase order
         current_phase = 0
@@ -219,6 +276,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                 continue
 
             api_key = keys[name]
+            cycle_attempted += 1
 
             try:
                 # 1. Get current state
@@ -282,6 +340,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                 print(f"  [{name}] Portfolio: ${post_value:,.2f} ({post_value - agent_config.get('initial_balance', 10000):+,.2f})")
 
             except Exception as e:
+                cycle_errors += 1
                 print(f"  [{name}] ERROR: {e}")
                 with open(exp_dir / "errors" / f"{name}_cycle_{cycle}.txt", "w") as f:
                     f.write(str(e))
@@ -323,10 +382,23 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
         cycle_time = time.time() - cycle_start
         print(f"\n  Cycle {cycle} completed in {cycle_time:.1f}s")
 
+        # Detect likely network-outage cycles (most agents failed) and back off harder
+        # instead of immediately burning through more cycles at the normal delay —
+        # this is what turned transient outages into 20-30 fully-dead cycles in v7.
+        error_rate = (cycle_errors / cycle_attempted) if cycle_attempted else 0
+        if error_rate >= BAD_CYCLE_ERROR_RATE:
+            consecutive_bad_cycles += 1
+            wait = min(cycle_delay * (2 ** consecutive_bad_cycles), BAD_CYCLE_MAX_BACKOFF)
+            print(f"  ⚠️  {cycle_errors}/{cycle_attempted} agents failed this cycle — "
+                  f"looks like a network outage, backing off {wait}s before retrying")
+        else:
+            consecutive_bad_cycles = 0
+            wait = cycle_delay
+
         # Wait for next cycle
         if cycle < num_cycles:
-            print(f"  Waiting {cycle_delay}s for next cycle...")
-            time.sleep(cycle_delay)
+            print(f"  Waiting {wait}s for next cycle...")
+            time.sleep(wait)
 
     # ── Experiment Complete ──
     print(f"\n{'='*60}")

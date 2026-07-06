@@ -26,7 +26,7 @@ current_prices: dict[str, Decimal] = {}
 
 async def fetch_binance_prices() -> dict[str, Decimal]:
     prices = {}
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(trust_env=False, timeout=5.0) as client:
         for pair in TRADING_PAIRS:
             try:
                 resp = await client.get(f"{settings.binance_base_url}/api/v3/ticker/price", params={"symbol": pair})
