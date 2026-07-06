@@ -3,11 +3,10 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from app.config import settings
 from app.models.balance import Balance, Currency
 from app.models.position import Position, PositionStatus
 from app.services.price_engine import current_prices
-from app.services.futures_engine import calc_unrealized_pnl
+from app.services.futures_engine import calc_unrealized_pnl, MMR
 from app.database import async_session
 
 logger = logging.getLogger(__name__)
@@ -28,7 +27,7 @@ async def check_liquidations():
             pnl = calc_unrealized_pnl(position.entry_price, current_price, position.quantity, position.side.value)
             position.unrealized_pnl = pnl
 
-            if position.margin + pnl <= position.entry_price * position.quantity * settings.maintenance_margin_rate:
+            if position.margin + pnl <= position.entry_price * position.quantity * MMR:
                 logger.warning(f"Liquidating position {position.id} for user {position.user_id}")
                 position.status = PositionStatus.liquidated
                 position.closed_at = datetime.utcnow()

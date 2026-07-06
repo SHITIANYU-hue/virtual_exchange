@@ -21,6 +21,12 @@ from app.models.balance import Balance
 from .tick_math import get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio
 from .pool_manager import create_pool, mint, _get_or_create_balance, _order_tokens
 
+# Oracle-priced assets — reserved so a launchpad token can never share a
+# balances.currency value with them (see 7c1a9e2b3f4d migration: that column
+# is a free-text varchar, so a colliding symbol would let self-minted supply
+# be cashed out at the real oracle price via spot trading).
+RESERVED_SYMBOLS = {"USDT", "ETH", "BTC", "SOL"}
+
 
 async def create_token(
     db: AsyncSession,
@@ -46,6 +52,8 @@ async def create_token(
     symbol = symbol.upper()
 
     # Validate
+    if symbol in RESERVED_SYMBOLS:
+        raise HTTPException(status_code=400, detail=f"Symbol {symbol} is reserved for oracle-priced assets")
     if total_supply <= 0:
         raise HTTPException(status_code=400, detail="total_supply must be positive")
     if initial_price <= 0:
