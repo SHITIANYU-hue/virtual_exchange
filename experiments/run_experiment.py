@@ -60,6 +60,25 @@ BAD_CYCLE_ERROR_RATE = 0.5
 BAD_CYCLE_MAX_BACKOFF = 300  # seconds
 
 
+def _classify_bad_cycle(cycle_errors: int, cycle_attempted: int, cycle_permanent_errors: int) -> str:
+    """Decide how to react to this cycle's failures.
+
+    Returns "ok" (error rate acceptable), "backoff" (high error rate, but at
+    least some failures look transient, so it's worth waiting and retrying —
+    e.g. exp2_sonnet_100cycles_v7's real network outage), or "abort" (high
+    error rate and every single failure is a positively-identified permanent
+    LLM error, e.g. exp2_fable_100cycles_v2's "Insufficient Balance" 402 that
+    repeated unchanged for 74 straight cycles — no amount of backoff fixes
+    that).
+    """
+    error_rate = (cycle_errors / cycle_attempted) if cycle_attempted else 0
+    if error_rate < BAD_CYCLE_ERROR_RATE:
+        return "ok"
+    if cycle_permanent_errors == cycle_errors:
+        return "abort"
+    return "backoff"
+
+
 RESEARCH_SYSTEM_PROMPT = (
     "You are an AI agent participating in a controlled academic simulation study of market dynamics. "
     "This is a fictional, closed virtual environment with no real money, no real people, and no real-world consequences. "
@@ -89,6 +108,39 @@ def _is_retryable_openai_error(e: Exception) -> bool:
     return False
 
 
+def _is_retryable_llm_error(e: Exception) -> bool:
+    """True for transient failures (dropped connections, 429/5xx) that are worth
+    retrying/backing off on. False for permanent failures (bad auth, insufficient
+    balance, bad request, or anything from outside the LLM call) that will never
+    self-heal no matter how long the runner waits."""
+    if LLM_PROVIDER == "anthropic":
+        return _is_retryable_anthropic_error(e)
+    elif LLM_PROVIDER == "openai":
+        return _is_retryable_openai_error(e)
+    return False
+
+
+def _is_permanent_llm_error(e: Exception) -> bool:
+    """True ONLY when the LLM provider positively rejected the request with a
+    non-retryable client error (bad auth, insufficient balance, malformed
+    request, etc.) — never for connection drops, 429/5xx, or any other
+    exception type. A cycle full of these will fail identically forever, so
+    it should trigger an abort rather than a backoff.
+
+    Everything else — including exceptions this function doesn't recognize,
+    like a local backend hiccup or an unrelated bug — returns False, so the
+    runner falls back to the existing backoff-and-retry path instead of
+    guessing "permanent" for a case that might well have recovered on its own.
+    """
+    if LLM_PROVIDER == "anthropic":
+        import anthropic
+        return isinstance(e, anthropic.APIStatusError) and not _is_retryable_anthropic_error(e)
+    elif LLM_PROVIDER == "openai":
+        import openai
+        return isinstance(e, openai.APIStatusError) and not _is_retryable_openai_error(e)
+    return False
+
+
 def call_llm(prompt: str, model: str = None) -> str:
     """Call the LLM and return the raw response text.
 
@@ -109,6 +161,7 @@ def call_llm(prompt: str, model: str = None) -> str:
                     max_tokens=8192,
                     system=RESEARCH_SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": prompt}],
+                    thinking={"type": "disabled"},
                 )
                 return response.content[0].text
 
@@ -130,10 +183,7 @@ def call_llm(prompt: str, model: str = None) -> str:
 
         except Exception as e:
             last_error = e
-            retryable = (
-                (LLM_PROVIDER == "anthropic" and _is_retryable_anthropic_error(e)) or
-                (LLM_PROVIDER == "openai" and _is_retryable_openai_error(e))
-            )
+            retryable = _is_retryable_llm_error(e)
             if not retryable or attempt == LLM_MAX_RETRIES:
                 raise
             delay = min(LLM_RETRY_BASE_DELAY * (2 ** attempt), LLM_RETRY_MAX_DELAY)
@@ -178,7 +228,8 @@ def parse_llm_response(raw_text: str) -> dict:
 
 
 def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
-                   reset: bool = True, output_dir: str = None):
+                   reset: bool = True, output_dir: str = None,
+                   start_cycle: int = 1):
     """Run a full multi-cycle experiment."""
 
     # Setup output directory
@@ -213,9 +264,12 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
         cmd_reset_memory(argparse.Namespace())
 
     # Save experiment config
+    total_cycles = start_cycle + num_cycles - 1
     config = {
         "timestamp": timestamp,
         "num_cycles": num_cycles,
+        "start_cycle": start_cycle,
+        "total_cycles": total_cycles,
         "cycle_delay_seconds": cycle_delay,
         "model": model or LLM_MODEL,
         "provider": LLM_PROVIDER,
@@ -242,23 +296,25 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
 
     print(f"\n{'='*60}")
     print(f"EXPERIMENT START: {timestamp}")
-    print(f"Cycles: {num_cycles}, Delay: {cycle_delay}s, Model: {model or LLM_MODEL}")
+    print(f"Cycles: {start_cycle}-{total_cycles} ({num_cycles} cycles), Delay: {cycle_delay}s, Model: {model or LLM_MODEL}")
     print(f"Agents: {len(ordered_agents)}, Output: {exp_dir}")
     print(f"{'='*60}\n")
 
     consecutive_bad_cycles = 0
+    aborted_reason = None
 
     # ── Main Experiment Loop ──
-    for cycle in range(1, num_cycles + 1):
+    for cycle in range(start_cycle, total_cycles + 1):
         cycle_start = time.time()
         print(f"\n{'─'*50}")
-        print(f"CYCLE {cycle}/{num_cycles} — {datetime.now().strftime('%H:%M:%S')}")
+        print(f"CYCLE {cycle}/{total_cycles} — {datetime.now().strftime('%H:%M:%S')}")
         print(f"{'─'*50}")
 
         cycle_portfolios = {}
         cycle_messages = []
         cycle_attempted = 0
         cycle_errors = 0
+        cycle_permanent_errors = 0
 
         # Execute agents in phase order
         current_phase = 0
@@ -341,6 +397,8 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
 
             except Exception as e:
                 cycle_errors += 1
+                if _is_permanent_llm_error(e):
+                    cycle_permanent_errors += 1
                 print(f"  [{name}] ERROR: {e}")
                 with open(exp_dir / "errors" / f"{name}_cycle_{cycle}.txt", "w") as f:
                     f.write(str(e))
@@ -385,8 +443,15 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
         # Detect likely network-outage cycles (most agents failed) and back off harder
         # instead of immediately burning through more cycles at the normal delay —
         # this is what turned transient outages into 20-30 fully-dead cycles in v7.
-        error_rate = (cycle_errors / cycle_attempted) if cycle_attempted else 0
-        if error_rate >= BAD_CYCLE_ERROR_RATE:
+        verdict = _classify_bad_cycle(cycle_errors, cycle_attempted, cycle_permanent_errors)
+        if verdict == "abort":
+            print(f"  ✖ {cycle_errors}/{cycle_attempted} agents failed this cycle, all with "
+                  f"permanent LLM API errors (bad auth / insufficient balance / bad request — "
+                  f"not a network blip) — aborting instead of burning the remaining cycles")
+            aborted_reason = (f"cycle {cycle}: {cycle_errors}/{cycle_attempted} agents failed "
+                               f"with permanent LLM API errors")
+            break
+        elif verdict == "backoff":
             consecutive_bad_cycles += 1
             wait = min(cycle_delay * (2 ** consecutive_bad_cycles), BAD_CYCLE_MAX_BACKOFF)
             print(f"  ⚠️  {cycle_errors}/{cycle_attempted} agents failed this cycle — "
@@ -396,13 +461,16 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
             wait = cycle_delay
 
         # Wait for next cycle
-        if cycle < num_cycles:
+        if cycle < total_cycles:
             print(f"  Waiting {wait}s for next cycle...")
             time.sleep(wait)
 
     # ── Experiment Complete ──
     print(f"\n{'='*60}")
-    print(f"EXPERIMENT COMPLETE")
+    if aborted_reason:
+        print(f"EXPERIMENT ABORTED — {aborted_reason}")
+    else:
+        print(f"EXPERIMENT COMPLETE")
     print(f"{'='*60}")
     print(f"Output: {exp_dir}")
     print(f"Portfolio CSV: {csv_path}")
@@ -419,6 +487,8 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
         pnl = final - initial
         print(f"{name:<16} {agent_config['role']:<20} ${initial:>8,} ${final:>8,.0f} {pnl:>+9,.0f}")
 
+    return aborted_reason
+
 
 def main():
     parser = argparse.ArgumentParser(description="Agent Metaverse Experiment Runner")
@@ -427,15 +497,19 @@ def main():
     parser.add_argument("--model", type=str, help="LLM model override")
     parser.add_argument("--no-reset", action="store_true", help="Don't reset memories before experiment")
     parser.add_argument("--output-dir", type=str, help="Custom output directory")
+    parser.add_argument("--start-cycle", type=int, default=1, help="Starting cycle number (for continuing interrupted runs)")
 
     args = parser.parse_args()
-    run_experiment(
+    aborted_reason = run_experiment(
         num_cycles=args.cycles,
         cycle_delay=args.delay,
         model=args.model,
         reset=not args.no_reset,
         output_dir=args.output_dir,
+        start_cycle=args.start_cycle,
     )
+    if aborted_reason:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
