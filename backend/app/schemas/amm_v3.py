@@ -1,4 +1,6 @@
 from typing import Optional
+from uuid import UUID
+
 from pydantic import BaseModel
 
 
@@ -14,23 +16,23 @@ class CreateTokenRequest(BaseModel):
 
 # V3 Pool Operations
 class AddLiquidityRequest(BaseModel):
-    pool_id: str
+    pool_id: UUID
     tick_lower: int
     tick_upper: int
     liquidity: float
 
 
 class RemoveLiquidityRequest(BaseModel):
-    position_id: str
+    position_id: UUID
     liquidity: float
 
 
 class CollectFeesRequest(BaseModel):
-    position_id: str
+    position_id: UUID
 
 
 class SwapV3Request(BaseModel):
-    pool_id: str
+    pool_id: UUID
     zero_for_one: bool
     amount: float              # positive = exactInput, negative = exactOutput
     sqrt_price_limit: Optional[float] = None
