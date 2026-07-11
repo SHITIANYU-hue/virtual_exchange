@@ -104,6 +104,13 @@ def _is_retryable_openai_error(e: Exception) -> bool:
     if isinstance(e, openai.APIConnectionError):
         return True
     if isinstance(e, openai.APIStatusError):
+        # OpenAI uses 429 for both ordinary rate limiting (retry) and quota/billing
+        # exhaustion (permanent — waiting never helps). The two are only distinguishable
+        # via the body's "code" field, not the status code (see exp2_openai_5cycles_v3_part2
+        # cycle 37: DiamondHands/HappyTrader both hit insufficient_quota and were retried
+        # for hours before manual intervention).
+        if e.status_code == 429 and e.code == "insufficient_quota":
+            return False
         return e.status_code == 429 or e.status_code >= 500
     return False
 

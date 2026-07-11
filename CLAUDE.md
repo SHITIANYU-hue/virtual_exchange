@@ -445,6 +445,17 @@ zero real data. Two mitigations are now built into `run_experiment.py`:
   outage and backs off the *next* cycle's start by `delay × 2^consecutive_bad_cycles`
   (capped at 300s) instead of retrying at the normal cadence; the backoff resets
   once a cycle succeeds normally.
+- If ≥50% of agents fail in a single cycle AND every failure is a
+  positively-identified *permanent* LLM error (bad auth, insufficient
+  balance/quota, bad request — not a network blip), the runner aborts instead
+  of backing off forever (`exp2_fable_100cycles_v2`'s 402 "Insufficient
+  Balance" repeated unchanged for 74 straight cycles; no amount of waiting
+  fixes that). OpenAI complicates this: it returns status 429 for both
+  ordinary rate limiting (retry) and quota exhaustion (permanent), distinguishable
+  only via the error body's `code` field, not the status code. `insufficient_quota`
+  is classified as permanent, not retryable — `exp2_openai_5cycles_v3_part2` cycle 37
+  hit this (DiamondHands/HappyTrader both got `insufficient_quota`) and the runner
+  retried for hours instead of aborting immediately.
 
 ## Complete Pump & Dump Flow (Step by Step)
 

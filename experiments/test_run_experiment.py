@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import httpx
 import anthropic
+import openai
 
 import experiments.run_experiment as run_experiment
 from experiments.run_experiment import (
@@ -28,6 +29,24 @@ def _status_error(status_code):
 def _connection_error():
     request = httpx.Request("POST", "http://x/v1/messages")
     return anthropic.APIConnectionError(request=request)
+
+
+def _openai_status_error(status_code, body=None):
+    request = httpx.Request("POST", "http://x/v1/chat/completions")
+    response = httpx.Response(status_code=status_code, request=request)
+    return openai.APIStatusError("boom", response=response, body=body)
+
+
+def _openai_quota_exceeded_error():
+    # Real body captured from exp2_openai_5cycles_v3_part2/errors/DiamondHands_cycle_37.txt —
+    # OpenAI uses status 429 for this AND for ordinary rate limiting, distinguished only
+    # by the body's "code" field.
+    return _openai_status_error(429, body={
+        "message": "You exceeded your current quota, please check your plan and billing details.",
+        "type": "insufficient_quota",
+        "param": None,
+        "code": "insufficient_quota",
+    })
 
 
 def test_classify_bad_cycle_ok_below_error_threshold():
@@ -106,6 +125,46 @@ def test_is_permanent_llm_error_false_for_unrecognized_exception():
     print("  not permanent for unrecognized exceptions ✓")
 
 
+def test_is_retryable_llm_error_false_for_openai_insufficient_quota():
+    # exp2_openai_5cycles_v3_part2 cycle 37 — DiamondHands and HappyTrader both hit
+    # this. OpenAI returns 429 for quota exhaustion same as ordinary rate limiting,
+    # but waiting/retrying never helps quota exhaustion — it's a billing wall like
+    # the Fable 402 case, just wearing a 429's clothes.
+    run_experiment.LLM_PROVIDER = "openai"
+    assert _is_retryable_llm_error(_openai_quota_exceeded_error()) is False
+    print("  not retryable for openai insufficient_quota ✓")
+
+
+def test_is_retryable_llm_error_true_for_openai_generic_rate_limit():
+    # A 429 without the insufficient_quota code is ordinary rate limiting and
+    # must still be retried — the fix must not treat every 429 as permanent.
+    run_experiment.LLM_PROVIDER = "openai"
+    assert _is_retryable_llm_error(_openai_status_error(429, body={
+        "message": "Rate limit reached for requests",
+        "type": "requests",
+        "param": None,
+        "code": "rate_limit_exceeded",
+    })) is True
+    print("  retryable for openai generic rate limit ✓")
+
+
+def test_is_permanent_llm_error_true_for_openai_insufficient_quota():
+    run_experiment.LLM_PROVIDER = "openai"
+    assert _is_permanent_llm_error(_openai_quota_exceeded_error()) is True
+    print("  permanent for openai insufficient_quota ✓")
+
+
+def test_is_permanent_llm_error_false_for_openai_generic_rate_limit():
+    run_experiment.LLM_PROVIDER = "openai"
+    assert _is_permanent_llm_error(_openai_status_error(429, body={
+        "message": "Rate limit reached for requests",
+        "type": "requests",
+        "param": None,
+        "code": "rate_limit_exceeded",
+    })) is False
+    print("  not permanent for openai generic rate limit ✓")
+
+
 if __name__ == "__main__":
     test_classify_bad_cycle_ok_below_error_threshold()
     test_classify_bad_cycle_backoff_when_all_errors_transient()
@@ -117,6 +176,10 @@ if __name__ == "__main__":
     test_is_permanent_llm_error_false_for_retryable_status_codes()
     test_is_permanent_llm_error_false_for_connection_error()
     test_is_permanent_llm_error_false_for_unrecognized_exception()
+    test_is_retryable_llm_error_false_for_openai_insufficient_quota()
+    test_is_retryable_llm_error_true_for_openai_generic_rate_limit()
+    test_is_permanent_llm_error_true_for_openai_insufficient_quota()
+    test_is_permanent_llm_error_false_for_openai_generic_rate_limit()
     print("=" * 60)
     print("ALL TESTS PASSED")
     print("=" * 60)
