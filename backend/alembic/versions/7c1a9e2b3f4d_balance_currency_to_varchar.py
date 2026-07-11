@@ -19,14 +19,19 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.alter_column(
-        'balances',
-        'currency',
-        existing_type=sa.Enum('USDT', 'ETH', 'SOL', 'BTC', name='currency'),
-        type_=sa.String(length=20),
-        postgresql_using='currency::text',
-    )
-    op.execute('DROP TYPE currency')
+    # This migration may have already been run via b1c3e9f72a88 (same down_revision).
+    # Skip the alter if the column is already varchar; use IF EXISTS for the type drop.
+    op.execute('DROP TYPE IF EXISTS currency')
+    try:
+        op.alter_column(
+            'balances',
+            'currency',
+            existing_type=sa.Enum('USDT', 'ETH', 'SOL', 'BTC', name='currency'),
+            type_=sa.String(length=20),
+            postgresql_using='currency::text',
+        )
+    except Exception:
+        pass  # column already altered
 
 
 def downgrade() -> None:
