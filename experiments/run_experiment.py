@@ -33,11 +33,13 @@ from agents.run import (
     get_agent_phase,
     load_ecosystem,
     load_keys,
+    save_keys,
     build_agent_prompt,
     execute_trades,
     update_memory_from_response,
     _calculate_portfolio_value,
     cmd_reset_memory,
+    cmd_setup,
 )
 
 import httpx
@@ -243,7 +245,7 @@ def parse_llm_response(raw_text: str) -> dict:
 
 
 def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
-                   reset: bool = True, output_dir: str = None,
+                   reset: bool = True, hard_reset: bool = False, output_dir: str = None,
                    start_cycle: int = 1):
     """Run a full multi-cycle experiment."""
 
@@ -259,12 +261,33 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     (exp_dir / "status").mkdir(exist_ok=True)
     (exp_dir / "errors").mkdir(exist_ok=True)
 
-    # Load ecosystem and keys
+    # Load ecosystem
     ecosystem = load_ecosystem()
-    keys = load_keys()
     ordered_agents = get_execution_order(ecosystem["agents"])
 
-    # Validate keys before starting
+    # Optionally hard-reset (wipe DB + re-register agents) or just reset memory.
+    # hard_reset is a strict superset of reset: it always wipes memory too,
+    # regardless of --no-reset. This must run BEFORE the key validation below:
+    # hard_reset truncates the users table and repopulates keys.json from
+    # scratch via cmd_setup(), so validating/loading keys first would either
+    # reject a legitimately-empty pre-reset keys.json or hand the rest of the
+    # function stale keys from before the wipe.
+    if hard_reset:
+        print("Hard-resetting database (wiping ALL agent state: balances, "
+              "positions, orders, messages, tokens, pools)...")
+        resp = httpx.post(f"{BASE_URL}/api/admin/hard-reset", json={"confirm": True}, timeout=30.0)
+        resp.raise_for_status()
+        save_keys({})
+        print("Re-registering all agents...")
+        cmd_setup(argparse.Namespace())
+        print("Resetting agent memories...")
+        cmd_reset_memory(argparse.Namespace())
+    elif reset:
+        print("Resetting agent memories...")
+        cmd_reset_memory(argparse.Namespace())
+
+    # Validate keys before starting (after any hard-reset above, so this
+    # reflects the freshly re-registered agents rather than pre-reset state)
     keys = load_keys()
     registered = [a["name"] for a in ordered_agents if a["name"] in keys]
     if not registered:
@@ -272,11 +295,6 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     if len(registered) < len(ordered_agents):
         missing = [a["name"] for a in ordered_agents if a["name"] not in keys]
         print(f"WARNING: {len(missing)} agents have no key and will be skipped: {missing}")
-
-    # Optionally reset memory
-    if reset:
-        print("Resetting agent memories...")
-        cmd_reset_memory(argparse.Namespace())
 
     # Save experiment config
     total_cycles = start_cycle + num_cycles - 1
@@ -288,6 +306,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
         "cycle_delay_seconds": cycle_delay,
         "model": model or LLM_MODEL,
         "provider": LLM_PROVIDER,
+        "hard_reset": hard_reset,
         "agents": [{"name": a["name"], "role": a["role"],
                      "initial_balance": a.get("initial_balance", 10000)}
                     for a in ordered_agents],
@@ -511,6 +530,11 @@ def main():
     parser.add_argument("--delay", type=int, default=10, help="Delay between cycles (seconds)")
     parser.add_argument("--model", type=str, help="LLM model override")
     parser.add_argument("--no-reset", action="store_true", help="Don't reset memories before experiment")
+    parser.add_argument("--hard-reset", action="store_true",
+                         help="DESTRUCTIVE: wipe ALL agents' balances/positions/orders/messages/"
+                              "tokens/pools in the database and re-register every agent fresh, "
+                              "in addition to resetting memory. Use for a truly clean experiment "
+                              "start; overrides --no-reset.")
     parser.add_argument("--output-dir", type=str, help="Custom output directory")
     parser.add_argument("--start-cycle", type=int, default=1, help="Starting cycle number (for continuing interrupted runs)")
 
@@ -520,6 +544,7 @@ def main():
         cycle_delay=args.delay,
         model=args.model,
         reset=not args.no_reset,
+        hard_reset=args.hard_reset,
         output_dir=args.output_dir,
         start_cycle=args.start_cycle,
     )
