@@ -105,6 +105,13 @@ def test_hard_reset_wipes_all_agent_state_but_keeps_prices():
         tokens_still_there = httpx.get(f"{TEST_BASE_URL}/api/token/list").json()
         assert any(t["symbol"] == "WIPEME" for t in tokens_still_there), "unconfirmed call wiped data!"
 
+        # Capture the actual price_history rows (NOT GET /api/prices, which just
+        # serves the in-process current_prices dict from price_engine.py and is
+        # never re-read from the DB — it would pass this check identically whether
+        # or not the TRUNCATE below ever touched price_history).
+        history_before = httpx.get(f"{TEST_BASE_URL}/api/prices/ETHUSDT/history").json()
+        assert history_before, "expected price_history rows for ETHUSDT to exist by now"
+
         # The real call.
         resp = httpx.post(f"{TEST_BASE_URL}/api/admin/hard-reset", json={"confirm": True})
         assert resp.status_code == 200, f"hard-reset call failed: {resp.status_code} {resp.text}"
@@ -123,10 +130,10 @@ def test_hard_reset_wipes_all_agent_state_but_keeps_prices():
         pools_after = httpx.get(f"{TEST_BASE_URL}/api/v3/pools").json()
         assert pools_after == [], f"expected no V3 pools after hard-reset, got {pools_after}"
 
-        prices_after = httpx.get(f"{TEST_BASE_URL}/api/prices").json()
-        assert prices_after and set(prices_after.keys()) == set(prices_before.keys()), (
-            f"expected price_history coverage to survive hard-reset unchanged, "
-            f"before={prices_before}, after={prices_after}"
+        history_after = httpx.get(f"{TEST_BASE_URL}/api/prices/ETHUSDT/history").json()
+        assert history_after == history_before, (
+            f"expected price_history rows for ETHUSDT to survive hard-reset unchanged, "
+            f"before={history_before}, after={history_after}"
         )
         print("  all agent state wiped, oracle prices intact ✓")
     finally:
