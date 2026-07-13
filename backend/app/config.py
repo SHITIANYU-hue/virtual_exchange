@@ -6,7 +6,12 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-secret-change-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
-    binance_base_url: str = "https://api.binance.com"
+    # api.binance.com returns HTTP 451 (geo-restricted) from this sandbox and
+    # price_engine.py connects directly (trust_env=False), so it never reaches
+    # it either way. data-api.binance.vision is Binance's public market-data
+    # mirror — no API key, less restrictive, reachable directly, same response
+    # shape for the /api/v3/ticker/price endpoint this project uses.
+    binance_base_url: str = "https://data-api.binance.vision"
     price_update_interval: int = 120  # seconds
     initial_balance: float = 10000.0  # USDT for new users
     spot_fee_rate: float = 0.001  # 0.1%

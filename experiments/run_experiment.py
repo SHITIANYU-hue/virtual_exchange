@@ -46,6 +46,14 @@ import httpx
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic")  # "anthropic" or "openai"
 LLM_MODEL = os.environ.get("LLM_MODEL", "claude-sonnet-4-20250514")
 
+# A Claude Code session's shell always carries ANTHROPIC_AUTH_TOKEN alongside
+# ANTHROPIC_API_KEY. When it's set-but-empty (common), anthropic.Anthropic()
+# still reads it from the environment for `auth_token` (passing api_key=
+# explicitly does NOT stop this — the SDK only skips the env lookup if
+# auth_token is passed too) and builds an illegal empty "Bearer " header,
+# which surfaces as a generic, retried-forever "Connection error.".
+os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+
 # Retry transient LLM call failures (dropped connections, timeouts, 429/5xx/overloaded).
 # The sandbox's outbound network path has been observed to drop for extended stretches
 # (see exp2_sonnet_100cycles_v7), which previously made every agent fail instantly and
@@ -162,7 +170,7 @@ def call_llm(prompt: str, model: str = None) -> str:
         try:
             if LLM_PROVIDER == "anthropic":
                 import anthropic
-                client = anthropic.Anthropic()
+                client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
                 response = client.messages.create(
                     model=model,
                     max_tokens=8192,

@@ -295,6 +295,63 @@ async def mint(
     }
 
 
+# Default position width when tick_lower/tick_upper are omitted, in units of
+# tick_spacing. Wide enough that "current tick moved a little" doesn't
+# immediately push the whole range out of reach again.
+DEFAULT_BELOW_PRICE_WIDTH_SPACINGS = 20
+
+
+async def mint_below_price_usdt(
+    db: AsyncSession,
+    pool_id: UUID,
+    owner_id: UUID,
+    amount_usdt: Decimal,
+    tick_lower: int | None = None,
+    tick_upper: int | None = None,
+) -> dict:
+    """
+    Add liquidity to a range entirely below the current price, sized by a
+    token1 (quote currency, e.g. USDT) notional instead of raw liquidity units.
+
+    Only well-defined for a range below the current price: such a range holds
+    only token1, so L = amount_usdt / (sqrt_upper - sqrt_lower) is unambiguous.
+    A range that straddles or sits above the current price needs a token0
+    amount too, which this endpoint has no way to accept.
+
+    If tick_lower/tick_upper are omitted, a safe range is computed automatically:
+    tick_upper snapped to the current tick's own tick_spacing slot (guaranteed
+    <= current tick) and tick_lower a fixed width below it. Callers across
+    several models (Haiku, GPT-4o, Fable — see experiments/findings_error_
+    adaptation_cross_model.md) have repeatedly picked a tick_upper exactly one
+    tick_spacing too high and never corrected it across retries even given a
+    clear error message, so letting them skip the arithmetic entirely removes
+    the failure mode instead of just explaining it better.
+    """
+    pool = await db.get(PoolV3, pool_id)
+    if not pool:
+        raise HTTPException(status_code=404, detail="Pool not found")
+
+    if tick_lower is None or tick_upper is None:
+        tick_upper = (pool.tick // pool.tick_spacing) * pool.tick_spacing
+        tick_lower = tick_upper - DEFAULT_BELOW_PRICE_WIDTH_SPACINGS * pool.tick_spacing
+
+    if tick_upper > pool.tick:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"amount_usdt only works for a range entirely below the current tick "
+                f"({pool.tick}); tick_upper={tick_upper} isn't. Use `liquidity` (raw L units) instead, "
+                f"or omit tick_lower/tick_upper to have a safe range computed automatically."
+            ),
+        )
+
+    sqrt_lower = get_sqrt_ratio_at_tick(tick_lower)
+    sqrt_upper = get_sqrt_ratio_at_tick(tick_upper)
+    liquidity_amount = amount_usdt / (sqrt_upper - sqrt_lower)
+
+    return await mint(db, pool_id, owner_id, tick_lower, tick_upper, liquidity_amount)
+
+
 # ---------------------------------------------------------------------------
 # burn (remove liquidity)
 # ---------------------------------------------------------------------------
@@ -423,6 +480,44 @@ async def collect(db: AsyncSession, position_id: UUID, owner_id: UUID) -> dict:
 # swap
 # ---------------------------------------------------------------------------
 
+async def _cross_tick_and_update_liquidity(
+    db: AsyncSession,
+    pool_id: UUID,
+    pool: PoolV3,
+    tick_index: int,
+    liquidity: Decimal,
+    zero_for_one: bool,
+    fee_growth_global: Decimal,
+) -> Decimal:
+    """
+    Apply a tick's liquidityNet to the swap loop's running liquidity, in either
+    the normal cross-tick step or the zero-liquidity "jump to next tick" step.
+
+    Raises if the result would be negative: liquidity must never go negative —
+    that both indicates a bookkeeping inconsistency and, left unchecked, feeds
+    a negative value into compute_swap_step, producing wildly disproportionate
+    (observed: ~1e23) amount_in/out instead of a clean error.
+    """
+    td, ti = await _get_tick_info(db, pool_id, tick_index)
+    liquidity_net = cross_tick(
+        ti,
+        fee_growth_global if zero_for_one else pool.fee_growth_global_0,
+        pool.fee_growth_global_1 if zero_for_one else fee_growth_global,
+    )
+    _save_tick_info(td, ti)
+
+    if zero_for_one:
+        liquidity_net = -liquidity_net
+    liquidity += liquidity_net
+
+    if liquidity < 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"AMM invariant violated: liquidity went negative crossing tick {tick_index}",
+        )
+    return liquidity
+
+
 async def swap(
     db: AsyncSession,
     user_id: UUID,
@@ -506,8 +601,12 @@ async def swap(
                 # Without this break the loop races to MAX/MIN_TICK through empty
                 # tick space (100 iterations), corrupting pool.sqrt_price at zero cost.
                 break
-            # An initialized tick exists ahead; jump to it and let the tick-cross
-            # logic below load its liquidity_net on the next iteration.
+            # An initialized tick exists ahead; jump to it AND cross it now — this
+            # is the only visit this tick ever gets, since next_initialized_tick_
+            # within_one_word always searches strictly past the current tick.
+            liquidity = await _cross_tick_and_update_liquidity(
+                db, pool_id, pool, step_tick_next, liquidity, zero_for_one, fee_growth_global,
+            )
             sqrt_price = sqrt_ratio_target
             if sqrt_price_next == sqrt_ratio_target:
                 tick = step_tick_next - 1 if zero_for_one else step_tick_next
@@ -534,17 +633,9 @@ async def swap(
         # Cross tick if we reached it
         if sqrt_price == sqrt_price_next:
             if step_initialized:
-                # Load tick and cross it
-                td, ti = await _get_tick_info(db, pool_id, step_tick_next)
-                liquidity_net = cross_tick(ti,
-                    fee_growth_global if zero_for_one else pool.fee_growth_global_0,
-                    pool.fee_growth_global_1 if zero_for_one else fee_growth_global,
+                liquidity = await _cross_tick_and_update_liquidity(
+                    db, pool_id, pool, step_tick_next, liquidity, zero_for_one, fee_growth_global,
                 )
-                _save_tick_info(td, ti)
-
-                if zero_for_one:
-                    liquidity_net = -liquidity_net
-                liquidity += liquidity_net
 
             tick = step_tick_next - 1 if zero_for_one else step_tick_next
         else:

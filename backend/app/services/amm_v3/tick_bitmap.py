@@ -67,10 +67,10 @@ class TickBitmapManager:
 
         Corresponds to: TickBitmap.nextInitializedTickWithinOneWord
         """
+        # Python's // already rounds toward negative infinity for all signs
+        # (unlike Solidity's `/`, which truncates toward zero and needs a
+        # manual decrement for negative ticks). No further adjustment needed.
         compressed = tick // self.tick_spacing
-        # Round toward negative infinity for negative ticks
-        if tick < 0 and tick % self.tick_spacing != 0:
-            compressed -= 1
 
         if lte:
             # Search left: find tick ≤ current within same word

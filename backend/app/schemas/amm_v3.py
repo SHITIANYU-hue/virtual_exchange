@@ -17,9 +17,12 @@ class CreateTokenRequest(BaseModel):
 # V3 Pool Operations
 class AddLiquidityRequest(BaseModel):
     pool_id: UUID
-    tick_lower: int
-    tick_upper: int
-    liquidity: float
+    # Required with `liquidity`. Optional with `amount_usdt` -- omit both to
+    # get a safe range computed automatically below the current price.
+    tick_lower: Optional[int] = None
+    tick_upper: Optional[int] = None
+    liquidity: Optional[float] = None
+    amount_usdt: Optional[float] = None    # alternative to `liquidity`, for ranges below the current price
 
 
 class RemoveLiquidityRequest(BaseModel):

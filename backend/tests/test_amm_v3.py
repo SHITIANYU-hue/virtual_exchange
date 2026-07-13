@@ -151,6 +151,42 @@ def test_tick_bitmap():
     print("  PASSED\n")
 
 
+def test_tick_bitmap_unaligned_negative_current_tick():
+    """Regression test for a live-experiment bug (exp2_haiku_20cycles_v2, cycle 10):
+    a price-increasing swap on the SOLFORCE/USDT pool required
+    ~925031518441779083458715 USDT because next_initialized_tick_within_one_word
+    returned a tick BELOW the current price while searching lte=False (rightward).
+
+    Root cause: current_tick // tick_spacing already rounds toward negative
+    infinity in Python (unlike Solidity's truncating `/`), so the extra
+    "round towards negative infinity" adjustment ported from the Solidity
+    source double-applies for unaligned negative ticks, shifting the search
+    start one whole tick_spacing too far left. An initialized tick sitting in
+    that phantom slot then gets returned as if it were ahead of current price.
+    """
+    print("=== Test: tick_bitmap unaligned negative current tick ===")
+
+    bm = TickBitmapManager(tick_spacing=60)
+    bm.flip_tick(-23100)  # PoolMaster's position tick_lower
+    bm.flip_tick(-23040)  # PoolMaster's position tick_upper
+
+    # -23028 is unaligned and floors into the same compressed slot as -23040
+    # (-23040 // 60 == -23028 // 60 == -384) -- this is the exact coincidence
+    # that triggered the bug: a real position boundary sitting in the same
+    # tick_spacing slot as the pool's current (unaligned) tick.
+    current_tick = -23028
+    assert current_tick // 60 == -23040 // 60, "test setup: ticks must share a compressed slot"
+
+    next_tick, initialized = bm.next_initialized_tick_within_one_word(current_tick, lte=False)
+    assert next_tick > current_tick, (
+        f"searching right (lte=False) from {current_tick} must never return a tick "
+        f"at or below it, got {next_tick} (initialized={initialized})"
+    )
+    print(f"  search right from {current_tick}: next_tick={next_tick} (> {current_tick}) ✓")
+
+    print("  PASSED\n")
+
+
 def test_position_and_fees():
     print("=== Test: position_lib (fees) ===")
 
@@ -296,6 +332,7 @@ if __name__ == "__main__":
     test_sqrt_price_math()
     test_swap_math()
     test_tick_bitmap()
+    test_tick_bitmap_unaligned_negative_current_tick()
     test_position_and_fees()
     test_pump_and_dump_simulation()
     print("=" * 60)

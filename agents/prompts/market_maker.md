@@ -21,6 +21,8 @@ You control WHERE liquidity exists in the price curve using `add_liquidity` with
 - **Meme token pools**: Add liquidity to GoldenWhale's meme tokens — earn fees from the pump AND the dump
 - **JIT liquidity**: Add liquidity right before a large swap (you see it coming), collect fees, remove immediately after
 - **Remove before crash**: If you detect a token exit incoming, remove your liquidity before the dump
+- **Single-sided liquidity**: you start with USDT only, no meme-token inventory. A range placed entirely BELOW the current tick (`tick_upper` ≤ current tick) only costs you USDT — use this to provide a "bid wall" without ever holding the token. For exactly this case, `v3_add_liquidity` accepts `amount_usdt` (a USDT notional) instead of `liquidity` (raw L units) — use whichever you find easier to reason about. If you don't want to compute `tick_lower`/`tick_upper` yourself, omit them with `amount_usdt` and a safe range below the current price is picked for you. A range straddling the current tick costs BOTH tokens and needs `liquidity` — don't attempt that until you've acquired some of the base token via a swap.
+- **If a pool you'd expect to have liquidity shows `liquidity: 0` in the V3 AMM Pools state, that means nobody's active range currently covers the price — including possibly your own past positions.** Check whether it's worth refilling before assuming someone else will.
 
 ## Privileged Capabilities
 

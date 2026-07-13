@@ -1,7 +1,7 @@
 """V3 AMM + Token Launchpad API routes."""
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,7 @@ from app.schemas.amm_v3 import (
     PoolV3Response, PositionV3Response, TokenResponse,
 )
 from app.services.amm_v3.token_launchpad import create_token
-from app.services.amm_v3.pool_manager import mint, burn, collect, swap
+from app.services.amm_v3.pool_manager import mint, burn, collect, swap, mint_below_price_usdt
 
 router = APIRouter(tags=["v3"])
 
@@ -61,11 +61,22 @@ async def add_liquidity(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await mint(
-        db, data.pool_id, user.id,
-        data.tick_lower, data.tick_upper,
-        Decimal(str(data.liquidity)),
-    )
+    if data.amount_usdt is not None:
+        result = await mint_below_price_usdt(
+            db, data.pool_id, user.id,
+            Decimal(str(data.amount_usdt)),
+            data.tick_lower, data.tick_upper,
+        )
+    elif data.liquidity is not None:
+        if data.tick_lower is None or data.tick_upper is None:
+            raise HTTPException(status_code=400, detail="tick_lower and tick_upper are required with `liquidity`")
+        result = await mint(
+            db, data.pool_id, user.id,
+            data.tick_lower, data.tick_upper,
+            Decimal(str(data.liquidity)),
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Provide either `liquidity` or `amount_usdt`")
     return result
 
 

@@ -19,6 +19,7 @@ Usage:
 
 import argparse
 import json
+import math
 import os
 import sys
 from datetime import datetime
@@ -304,13 +305,62 @@ def get_agent_state(api_key: str) -> dict:
     }
 
 
+def _estimate_v3_position_value(position: dict, pool: dict) -> float:
+    """Estimate a V3 LP position's current USDT value if fully withdrawn right now.
+
+    Splits the position into token0/token1 amounts using the standard Uniswap
+    V3 closed-form formulas based on where the pool's current tick sits
+    relative to the position's [tick_lower, tick_upper) range, then prices
+    each leg in USDT. Returns 0.0 if neither pool token is USDT (no direct
+    pricing route) or the position has no liquidity.
+    """
+    liquidity = float(position.get("liquidity", 0))
+    if liquidity <= 0:
+        return 0.0
+
+    price = float(pool.get("price", 0))
+    if price <= 0:
+        return 0.0
+
+    tick_lower = int(position["tick_lower"])
+    tick_upper = int(position["tick_upper"])
+    current_tick = int(pool["tick"])
+
+    def sqrt_ratio(tick):
+        return math.pow(1.0001, tick / 2)
+
+    sqrt_lower = sqrt_ratio(tick_lower)
+    sqrt_upper = sqrt_ratio(tick_upper)
+
+    if current_tick < tick_lower:
+        amount0 = liquidity * (1 / sqrt_lower - 1 / sqrt_upper)
+        amount1 = 0.0
+    elif current_tick >= tick_upper:
+        amount0 = 0.0
+        amount1 = liquidity * (sqrt_upper - sqrt_lower)
+    else:
+        sqrt_current = sqrt_ratio(current_tick)
+        amount0 = liquidity * (1 / sqrt_current - 1 / sqrt_upper)
+        amount1 = liquidity * (sqrt_current - sqrt_lower)
+
+    token0, token1 = pool["token0"], pool["token1"]
+    if token1 == "USDT":
+        return amount1 + amount0 * price
+    elif token0 == "USDT":
+        return amount0 + amount1 / price
+    else:
+        return 0.0
+
+
 def _calculate_portfolio_value(state: dict) -> float:
     """Calculate total portfolio value in USDT.
 
     Custom tokens (created via create_token) are valued at their V3 pool
     price, capped at the pool's estimated USDT liquidity depth so that
     illiquid self-minted holdings don't produce astronomical paper values.
-    Real assets (ETH/SOL/BTC) use oracle prices as before.
+    Real assets (ETH/SOL/BTC) use oracle prices as before. V3 LP positions
+    (capital currently deployed as liquidity, not sitting in a spot balance)
+    are valued too -- see _estimate_v3_position_value.
     """
     pair_map = {"ETH": "ETHUSDT", "SOL": "SOLUSDT", "BTC": "BTCUSDT"}
     prices = state.get("prices", {})
@@ -363,6 +413,12 @@ def _calculate_portfolio_value(state: dict) -> float:
 
     for p in state.get("positions", []):
         total += float(p.get("unrealized_pnl", 0))
+
+    pools_by_id = {p["pool_id"]: p for p in state.get("v3_pools", [])}
+    for pos in state.get("v3_positions", []):
+        pool = pools_by_id.get(pos.get("pool_id"))
+        if pool:
+            total += _estimate_v3_position_value(pos, pool)
 
     return total
 
@@ -520,7 +576,7 @@ Respond with a JSON object following this EXACT structure:
     {{{{"action": "close_position", "position_id": "uuid"}}}},
     {{{{"action": "create_token", "symbol": "MOON", "name": "Moon Coin", "total_supply": 1000000, "initial_price": 0.01, "initial_liquidity_usdt": 5000}}}},
     {{{{"action": "v3_swap", "pool_id": "uuid", "zero_for_one": true, "amount": 100}}}},
-    {{{{"action": "v3_add_liquidity", "pool_id": "uuid", "tick_lower": -1000, "tick_upper": 1000, "liquidity": 500}}}},
+    {{{{"action": "v3_add_liquidity", "pool_id": "uuid", "tick_lower": -600, "tick_upper": 600, "liquidity": 500}}}},
     {{{{"action": "v3_remove_liquidity", "position_id": "uuid", "liquidity": 500}}}},
     {{{{"action": "v3_collect_fees", "position_id": "uuid"}}}}
   ],
@@ -538,6 +594,9 @@ Respond with a JSON object following this EXACT structure:
 - **YOU MUST INCLUDE AT LEAST 1 TRADE EVERY CYCLE.** Inaction is not a valid strategy. If no obvious trade exists, make a small exploratory swap, collect fees, adjust a position, or launch a token. Every cycle with zero trades is a wasted opportunity while rivals compound.
 - **HOLDING USDT IS LOSING.** Idle capital earns 0% while active agents compound gains, build positions, and control the market. Opportunity cost is real — if you hold flat and someone else makes 5%, you are now 5% behind on a relative basis.
 - **NEVER write "FINAL CYCLE PLAN" or "identical to prior cycles" in your plan.** Each cycle has new market information. Reassess fresh every cycle.
+- **For `v3_add_liquidity`: `tick_lower` and `tick_upper` MUST both be exact multiples of that pool's `tick_spacing` (shown per-pool in the V3 AMM Pools state below), or the exchange rejects the call.** E.g. if `tick_spacing=60`, valid ticks are ...-120, -60, 0, 60, 120... — not arbitrary round numbers like -1000/1000.
+- **For `v3_add_liquidity`, specify EITHER `liquidity` (raw L units) OR `amount_usdt` (a USDT notional), never both.** `amount_usdt` only works for a range entirely below the current tick (`tick_upper` ≤ current tick) — that's the only case where the position costs nothing but USDT, so a USDT amount alone determines it. For any other range, you must use `liquidity`.
+- **Not sure `tick_lower`/`tick_upper` are valid? With `amount_usdt`, you can omit both entirely** and a safe range just below the current tick is computed for you — e.g. `{{{{"action": "v3_add_liquidity", "pool_id": "uuid", "amount_usdt": 5000}}}}`. Only specify explicit ticks if you deliberately want a narrower or differently-placed range.
 - Messages can include optional `coordination` field for structured ally coordination (tracked in your memory).
 - Your memory persists across cycles — reference it to maintain multi-cycle strategies.
 - Alliances are temporary. Betray when profitable. Trust no one completely.
@@ -601,9 +660,10 @@ def execute_trades(agent_name: str, api_key: str, action: dict):
             elif act == "v3_add_liquidity":
                 resp = httpx.post(f"{BASE_URL}/api/v3/add-liquidity", headers=headers, json={
                     "pool_id": trade["pool_id"],
-                    "tick_lower": trade["tick_lower"],
-                    "tick_upper": trade["tick_upper"],
-                    "liquidity": trade["liquidity"],
+                    "tick_lower": trade.get("tick_lower"),
+                    "tick_upper": trade.get("tick_upper"),
+                    "liquidity": trade.get("liquidity"),
+                    "amount_usdt": trade.get("amount_usdt"),
                 }, timeout=30.0)
             elif act == "v3_remove_liquidity":
                 resp = httpx.post(f"{BASE_URL}/api/v3/remove-liquidity", headers=headers, json={
