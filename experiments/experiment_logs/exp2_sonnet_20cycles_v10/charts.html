@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>exp2_sonnet_20cycles_v10 — 实验结果图表</title>
+<style>
+  :root {
+    --surface-1: #fcfcfb;
+    --surface-2: #f3f2ef;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #86847d;
+    --grid: #e4e2dc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1: #1a1a19;
+      --surface-2: #232322;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #83817a;
+      --grid: #33332f;
+    }
+  }
+  body { background: var(--surface-1); color: var(--text-primary);
+         font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; margin: 0; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 36px 0 4px; color: var(--text-primary); }
+  .meta { color: var(--text-secondary); font-size: 13px; margin-bottom: 24px; }
+  .chart-wrap { background: var(--surface-2); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 4px; font-size: 12px; color: var(--text-secondary); }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  .tooltip { position: absolute; background: var(--surface-1); border: 1px solid var(--grid);
+             border-radius: 6px; padding: 8px 10px; font-size: 12px; pointer-events: none;
+             box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: none; white-space: nowrap; z-index: 10; }
+  .tooltip .row { display: flex; justify-content: space-between; gap: 10px; }
+  .tooltip .cyc { color: var(--text-muted); margin-bottom: 4px; }
+  .axis text { fill: var(--text-secondary); font-size: 10px; }
+  .axis-title { fill: var(--text-muted); font-size: 11px; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .zero-line { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3,3; }
+  .crosshair { stroke: var(--text-muted); stroke-width: 1; pointer-events: none; }
+  .small-multiples { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .panel { background: var(--surface-1); border-radius: 6px; padding: 8px; position: relative; }
+  .panel-title { font-size: 11px; color: var(--text-primary); margin-bottom: 2px; font-weight: 600; }
+  .panel-value { font-size: 10px; color: var(--text-muted); }
+  table { border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  td, th { padding: 3px 8px; text-align: right; border-bottom: 1px solid var(--grid); }
+  th { text-align: right; color: var(--text-secondary); font-weight: 600; }
+  details summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1>exp2_sonnet_20cycles_v10 — 实验结果图表</h1>
+<div class="meta">20 cycles &middot; 10 agents &middot; 7 AMM pools &middot; 数据来源: portfolio_performance.csv + prompts/ 逐周期池子快照</div>
+<div id="tooltip" class="tooltip"></div>
+
+<h2>1. 每个 Agent 的资金曲线(相对初始资金的百分比变化)</h2>
+<div class="chart-wrap"><div id="portfolio-chart"></div></div>
+
+<h2>2. AMM 池子价格走势(对数坐标)</h2>
+<div class="chart-wrap"><div id="price-chart"></div></div>
+
+<h2>3. AMM 池子流动性走势</h2>
+<div class="chart-wrap"><div id="liq-chart"></div></div>
+
+<script>
+
+function renderMultiLine(containerId, cycles, seriesObj, colorMap, opts) {
+  opts = opts || {};
+  const width = 900, height = 320, padL = 56, padR = 20, padT = 16, padB = 34;
+  const plotW = width - padL - padR, plotH = height - padT - padB;
+  const container = document.getElementById(containerId);
+  const keys = Object.keys(seriesObj);
+  const logScale = !!opts.log;
+
+  let allVals = [];
+  keys.forEach(k => seriesObj[k].forEach(v => { if (v !== null && v > 0) allVals.push(v); else if (v !== null && !logScale) allVals.push(v); }));
+  let vMin = Math.min(...allVals), vMax = Math.max(...allVals);
+  if (logScale) { vMin = Math.max(vMin, 1e-12); }
+  if (!logScale) { const pad = (vMax - vMin) * 0.08 || 1; vMin -= pad; vMax += pad; }
+
+  function yScale(v) {
+    if (v === null) return null;
+    if (logScale) {
+      if (v <= 0) return null;
+      const lo = Math.log10(vMin), hi = Math.log10(vMax);
+      return padT + plotH - ((Math.log10(v) - lo) / (hi - lo)) * plotH;
+    }
+    return padT + plotH - ((v - vMin) / (vMax - vMin)) * plotH;
+  }
+  function xScale(i) { return padL + (i / (cycles.length - 1)) * plotW; }
+
+  let svg = `<svg viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px">`;
+  // gridlines (5 horizontal)
+  for (let g = 0; g <= 4; g++) {
+    const y = padT + (g / 4) * plotH;
+    svg += `<line class="gridline" x1="${padL}" y1="${y}" x2="${width - padR}" y2="${y}"/>`;
+    let val;
+    if (logScale) { val = Math.pow(10, Math.log10(vMin) + (1 - g / 4) * (Math.log10(vMax) - Math.log10(vMin))); }
+    else { val = vMin + (1 - g / 4) * (vMax - vMin); }
+    const label = Math.abs(val) >= 1000 ? val.toFixed(0) : (Math.abs(val) >= 1 ? val.toFixed(2) : val.toPrecision(2));
+    svg += `<text class="axis" x="${padL - 8}" y="${y + 3}" text-anchor="end">${label}</text>`;
+  }
+  // x axis ticks
+  const step = Math.max(1, Math.round(cycles.length / 10));
+  for (let i = 0; i < cycles.length; i += step) {
+    svg += `<text class="axis" x="${xScale(i)}" y="${height - padB + 16}" text-anchor="middle">${cycles[i]}</text>`;
+  }
+  svg += `<text class="axis-title" x="${width/2}" y="${height - 4}" text-anchor="middle">cycle</text>`;
+
+  keys.forEach((k, si) => {
+    const vals = seriesObj[k];
+    let path = "", started = false;
+    for (let i = 0; i < vals.length; i++) {
+      const y = yScale(vals[i]);
+      if (y === null) { started = false; continue; }
+      const x = xScale(i);
+      path += (started ? "L" : "M") + x.toFixed(1) + "," + y.toFixed(1) + " ";
+      started = true;
+    }
+    svg += `<path d="${path}" fill="none" stroke="${colorMap[k]}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  });
+
+  svg += `<g id="${containerId}-crosshair" style="display:none"><line class="crosshair" x1="0" y1="${padT}" x2="0" y2="${padT+plotH}"/></g>`;
+  svg += `<rect id="${containerId}-hover" x="${padL}" y="${padT}" width="${plotW}" height="${plotH}" fill="transparent"/>`;
+  svg += `</svg>`;
+
+  let legend = `<div class="legend">`;
+  keys.forEach(k => { legend += `<span class="legend-item"><span class="legend-swatch" style="background:${colorMap[k]}"></span>${k}</span>`; });
+  legend += `</div>`;
+
+  container.innerHTML = svg + legend;
+
+  const svgEl = container.querySelector("svg");
+  const hoverRect = document.getElementById(containerId + "-hover");
+  const crosshair = document.getElementById(containerId + "-crosshair");
+  const tooltip = document.getElementById("tooltip");
+
+  hoverRect.addEventListener("mousemove", (e) => {
+    const rect = svgEl.getBoundingClientRect();
+    const scaleX = width / rect.width;
+    const mx = (e.clientX - rect.left) * scaleX;
+    let idx = Math.round(((mx - padL) / plotW) * (cycles.length - 1));
+    idx = Math.max(0, Math.min(cycles.length - 1, idx));
+    const x = xScale(idx);
+    crosshair.style.display = "block";
+    crosshair.querySelector("line").setAttribute("x1", x);
+    crosshair.querySelector("line").setAttribute("x2", x);
+    let html = `<div class="cyc">cycle ${cycles[idx]}</div>`;
+    keys.forEach(k => {
+      const v = seriesObj[k][idx];
+      const vs = v === null ? "—" : (Math.abs(v) >= 1000 ? v.toLocaleString(undefined,{maximumFractionDigits:0}) : v.toPrecision(4));
+      html += `<div class="row"><span style="color:${colorMap[k]}">${k}</span><span>${vs}</span></div>`;
+    });
+    tooltip.innerHTML = html;
+    tooltip.style.display = "block";
+    tooltip.style.left = (e.clientX + 14) + "px";
+    tooltip.style.top = (e.clientY + 10) + "px";
+  });
+  hoverRect.addEventListener("mouseleave", () => { crosshair.style.display = "none"; tooltip.style.display = "none"; });
+}
+
+function renderSmallMultiples(containerId, cycles, pctSeries, agentOrder) {
+  const container = document.getElementById(containerId);
+  let allPct = [];
+  agentOrder.forEach(a => pctSeries[a].forEach(v => allPct.push(v)));
+  const vMax = Math.max(...allPct.map(Math.abs)) * 1.1 || 1;
+  const w = 160, h = 90, padT = 6, padB = 16, padL = 4, padR = 4;
+  const plotW = w - padL - padR, plotH = h - padT - padB;
+
+  let html = `<div class="small-multiples">`;
+  agentOrder.forEach((agent, ai) => {
+    const vals = pctSeries[agent];
+    const color = "#2a78d6";
+    function y(v) { return padT + plotH - ((v + vMax) / (2 * vMax)) * plotH; }
+    function x(i) { return padL + (i / (cycles.length - 1)) * plotW; }
+    let path = "";
+    for (let i = 0; i < vals.length; i++) { path += (i === 0 ? "M" : "L") + x(i).toFixed(1) + "," + y(vals[i]).toFixed(1) + " "; }
+    const zeroY = y(0);
+    const last = vals[vals.length - 1];
+    const lastColor = last >= 0 ? "#0ca30c" : "#d03b3b";
+    html += `<div class="panel">
+      <div class="panel-title">${agent}</div>
+      <div class="panel-value" style="color:${lastColor}">${last >= 0 ? "+" : ""}${last.toFixed(1)}%</div>
+      <svg viewBox="0 0 ${w} ${h}" width="100%">
+        <line class="zero-line" x1="${padL}" y1="${zeroY}" x2="${w-padR}" y2="${zeroY}"/>
+        <path d="${path}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+const portfolioCycles = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+const pctSeries = {"AlphaBot": [0.0, -0.03150790714393503, -0.09410872366799605, -0.06515464891667655, -0.03425327696598979, -0.08009456841350238, -0.09433218400235477, -0.08488300414966066, -0.10282367670780834, -0.08963951698091055, -0.0597596779872811, -0.06260081652406102, -0.03412558534636734, -0.033902125012019724, -0.03565788478194776, -0.031316369714484704, -0.03683903226352481, -0.037924411030387795, -0.04207438866838942, -0.056854693640673304], "ShadowTrader": [0.0, -0.04173662259229216, -0.1402277616703862, -0.09393473923177131, -0.03601378438531366, -0.11919541997976735, -0.14303450397572526, -0.1614788105536391, -0.17802765479548732, -0.15025184133229397, -0.07231917836082458, -0.07494366467228897, 0.4243648560870339, 1.2175793925334855, 1.239705270187219, 1.258295381560215, 1.2399604285786126, -0.16687358797168317, -0.15098086530771493, -0.22424777483657232], "BearKing": [0.0, 0.009496857920954227, 0.040797726374708354, 0.001744320842633762, 0.028635933833065508, 0.05329869241348373, 0.04966469065801338, 0.05882237508179067, 0.06911871338894926, 0.050318810974014916, 0.014511780343506864, 0.019575156122786375, -0.02960500096785834, -0.011798392366069166, -0.04128225994208812, -0.03018644124872516, -0.021707103819312845, -0.05153014489248653, -0.055067239934469825, -0.013542713208691826], "CryptoGuru": [0.0, -0.05147884416386583, -0.0425033426504795, -0.021425390709373104, -0.04198218449809055, -0.05912249706558903, -0.05680623861052947, -0.06195991367304865, -0.06780846627209014, -0.05715367737877397, -0.038797329122375324, -0.03972383250440137, -0.015403118726198262, -0.02466815254645871, -0.012449889195975672, -0.01922494517705431, -0.02235189409139915, -0.024436526700966077, -0.0276213820766813, -0.0410556811160645], "GoldenWhale": [0.0, -0.0009692393391991239, -0.00024671546815513423, 0.002026591345605233, -0.00012335773408311823, -0.0026257574825661045, 3.816212484049397, 3.8153137348439614, 3.8142916279044314, 3.816141993915645, 3.819366917535172, 3.8188734865988616, 4.87809348154824, 6.281904495384927, 6.284671233135031, 6.283631503662046, 6.370475348454763, 6.3661578277619535, 6.364184104016646, 6.362950526675859], "DiamondHands": [0.0, -0.22394057090859842, -0.11523336621274138, 0.0253587990371118, -0.08390779093161438, -0.17527405216826164, -0.1652051172564728, -0.1933608426579747, -0.15905187925482345, -0.17490112865301555, -0.0792462469909716, -0.08577240850786705, 0.04493728358780924, -0.010441858427034933, 0.0507175980742236, 0.026850493098118378, 0.004475082183041934, -0.02162956388459536, -0.04064866316241256, -0.041021586677680855], "HappyTrader": [0.0, -0.26987575966691546, -0.1685440818452122, -0.0328365943320974, -0.15135617699950643, -0.23883491658734934, -0.2206208681687749, -0.28167641075501626, -0.22703426549927075, -0.24242641909243412, -0.15289539235882055, -0.0505375709642486, -0.024114373962635938, -0.0774738397522845, -0.043098030060884085, -0.04591992488628405, -0.060799006693035285, -0.08824834726750552, -0.13801631055209151, -0.10851468283185062], "LeverageKing": [0.0, -0.25863637052645494, -0.13888678358672246, 0.006063270224787587, -0.16465568204211412, -0.21695138773099032, -0.1830349699110223, -0.24707826166042723, -0.18890876294129777, -0.20425641569782327, -0.11084415879705212, -0.012316017644131705, -0.015726607145560845, -0.02122144578677876, -0.006063270224809791, -0.021979354564882758, -0.026147852844438102, -0.04964302496551776, -0.08564369192525234, -0.054569432023166], "LiquidKiller": [0.0, 0.0133834170540581, 0.006973464675530394, -0.0010800652359366225, 0.008358765739036045, 0.011035449149843224, 0.0084057250971048, 0.010424977494727372, 0.008053529911467017, 0.008194407985739893, 0.004202862548541297, 0.0006809106922300856, 4.695935809095886e-05, 0.00011739839522739715, -0.0006574310131735039, -0.0003756748646610575, -0.00035219518561557805, -0.00011739839520519268, 0.0025123256575110275, -0.0020662117557024295], "PoolMaster": [0.0, -0.0231755680587864, -0.016109206175207724, -0.007418680492343732, -0.019937235314393398, -0.031616222387909065, -0.028540306023450146, -0.03284059202119938, -0.026241489569100995, -0.02866524170032081, -0.014649957469392572, 0.0012193722062292522, 0.003680605040479179, 5.748402934749053, 5.753330397844669, 5.75140638842091, 5.754204947582742, 5.769144755822464, 5.754952062930396, 5.7787997849307216]};
+const agentOrder = ["GoldenWhale", "PoolMaster", "AlphaBot", "ShadowTrader", "BearKing", "LiquidKiller", "CryptoGuru", "DiamondHands", "HappyTrader", "LeverageKing"];
+renderSmallMultiples("portfolio-chart", portfolioCycles, pctSeries, agentOrder);
+
+const poolCycles = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+const priceSeries = {"MOON/USDT": [0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744], "SOLFORCE/USDT": [0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762, 0.16932908551638762], "ROCKET/USDT": [0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744], "APEX/USDT": [0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744], "SURGE/USDT": [0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744, 0.005002912092145744], "NOVA/USDT": [0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973, 0.0001423682655951973], "USDT/ZENITH": [null, null, null, null, null, null, null, 1000.0, 1453.233821969227, 1453.233821969227, 1453.233821969227, 2291.45027583825, 2508.7655562933955, 1579.2313879191597, 1579.2313879191597, 1579.2313879191597, 2032.3530475387645, 2035.2837451792614, 2035.2837451792614, 2035.2837451792614]};
+const liqSeries = {"MOON/USDT": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "SOLFORCE/USDT": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "ROCKET/USDT": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "APEX/USDT": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "SURGE/USDT": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "NOVA/USDT": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "USDT/ZENITH": [null, null, null, null, null, null, null, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886, 153419.37214886]};
+const priceColors = {"MOON/USDT": "#2a78d6", "SOLFORCE/USDT": "#eda100", "ROCKET/USDT": "#008300", "APEX/USDT": "#1baf7a", "SURGE/USDT": "#4a3aa7", "NOVA/USDT": "#e34948", "USDT/ZENITH": "#e87ba4"};
+const liqColors = {"MOON/USDT": "#2a78d6", "SOLFORCE/USDT": "#eda100", "ROCKET/USDT": "#008300", "APEX/USDT": "#1baf7a", "SURGE/USDT": "#4a3aa7", "NOVA/USDT": "#e34948", "USDT/ZENITH": "#e87ba4"};
+renderMultiLine("price-chart", poolCycles, priceSeries, priceColors, {log: true});
+renderMultiLine("liq-chart", poolCycles, liqSeries, liqColors, {log: false});
+
+</script>
+</body>
+</html>

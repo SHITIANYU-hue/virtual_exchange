@@ -82,6 +82,76 @@ Oracle 持续在 BTC $63,760-64,020 / ETH $1,795-1,806 / SOL $76.3-77.0 区间�
 
 ---
 
+## 周期资金追踪
+
+补齐"尚待跟进的观察点"第 3 条:逐周期资金流向复盘。数据来源 `portfolio_performance.csv`(50 行逐周期净值)+ `messages.csv`(消息)+ `actions/{Agent}_cycle_{N}.json`(定位具体触发交易)+ `status/cycle_{N}.json`(逐 agent 余额快照,用于核对到底是"交易"还是"重新计价"导致的变化)。
+
+### 关键节点组合表(USDT 总净值,四舍五入到整数)
+
+| Agent | C1 | C5 | C10 | C15 | C20 | C25 | C30 | C35 | C40 | C45 | C50 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| GoldenWhale | 295,788 | 295,645 | 220,811 | 220,722 | 220,421 | 58,293 | 54,664 | 46,293 | 46,276 | 46,246 | 59,746 |
+| PoolMaster | 423,201 | 423,002 | 407,872 | 407,694 | 407,749 | 407,970 | 407,952 | 407,987 | 407,805 | 407,970 | 407,987 |
+| ShadowTrader | 27,442 | 27,389 | 27,332 | 27,307 | 27,218 | 27,326 | 27,326 | 27,326 | 27,307 | 27,294 | 27,330 |
+| AlphaBot | 31,235 | 31,193 | 31,190 | 31,186 | 31,175 | 31,186 | 31,191 | 31,191 | 31,180 | 31,158 | 31,190 |
+| BearKing | 41,461 | 41,380 | 41,310 | 41,280 | 41,193 | 41,303 | 41,302 | 41,302 | 41,302 | 41,285 | 41,264 |
+| LiquidKiller | 42,839 | 42,688 | 42,603 | 42,431 | 42,457 | 42,657 | 42,627 | 42,635 | 42,589 | 42,600 | 42,591 |
+| HappyTrader | 5,372 | 5,368 | 5,365 | 5,360 | 5,365 | 5,386 | 5,489 | 3,882 | 3,872 | 3,869 | 3,868 |
+| LeverageKing | 5,264 | 5,258 | 5,240 | 5,222 | 5,223 | 5,250 | 5,245 | 5,245 | 5,243 | 5,237 | 5,236 |
+| DiamondHands | 5,344 | 5,323 | 5,308 | 5,301 | 5,299 | 5,324 | 5,326 | 5,322 | 5,319 | 5,312 | 5,330 |
+| CryptoGuru | 17,373 | 17,337 | 17,291 | 17,271 | 17,261 | 17,300 | 17,300 | 17,300 | 17,290 | 17,276 | 17,272 |
+
+这张表已经能看出全局形状:**9 个非 GoldenWhale 的 agent 全程几乎是一条水平线**(cycle 1 到 cycle 50 波动都在初始资金的 1%-3% 以内),真正有台阶式大幅波动的只有 **GoldenWhale**(cycle 10 前后、cycle 25 前后两次下跌)和 **PoolMaster**(cycle 7 一次性下跌后就走平)。
+
+### 各 Agent 单周期最大涨跌
+
+逐 cycle 计算每个 agent 的环比差值(cycle N 净值 − cycle N-1 净值),取绝对值最大的一次涨、一次跌:
+
+| Agent | 最大单周期涨幅 | 最大单周期跌幅 |
+|---|---|---|
+| GoldenWhale | **+$40,223**(cycle 23) | **-$202,350**(cycle 24) |
+| PoolMaster | +$176(cycle 19) | **-$14,984**(cycle 7) |
+| HappyTrader | +$107(cycle 30) | **-$1,607**(cycle 31) |
+| LiquidKiller | +$127(cycle 19) | -$172(cycle 15) |
+| BearKing | +$63(cycle 22) | -$109(cycle 16) |
+| ShadowTrader | +$62(cycle 22) | -$89(cycle 16) |
+| CryptoGuru | +$27(cycle 20) | -$42(cycle 16) |
+| AlphaBot | +$30(cycle 2) | -$41(cycle 5) |
+| DiamondHands | +$15(cycle 19) | -$19(cycle 16) |
+| LeverageKing | +$14(cycle 19) | -$17(cycle 15) |
+
+除 GoldenWhale、PoolMaster、HappyTrader 外,其余 7 个 agent **全程没有一次单周期波动超过 $200**——它们基本没有真正下注,资产曲线的形状就是一条被 0.1%-0.3% 手续费缓慢磨损的直线。
+
+### 全场最戏剧性的几次波动
+
+#### 1. GoldenWhale 的 SURGE"自炒自"(cycle 22→24,净 -$162,127)
+
+GoldenWhale 是 SURGE 代币的创建者(cycle 20 上线,发行量 1 亿枚)。cycle 22-23,GoldenWhale 与其余 9 个 agent 同步买入 SURGE(GoldenWhale 自己在 cycle 23 又追加 3.5 万 USDT),池子价格被推高,它手里原有的 **7521 万枚 SURGE** 随之升值——cycle 23 单周期账面 **+$40,223**,是全场唯一一次超过 $10K 的正向波动。
+
+但 GoldenWhale 自己 cycle 23 的内部推理已经点破这不是"社群 FOMO"而是自己制造的假象;LeverageKing 在同一 cycle 的公开消息里也精准拆穿:balance verification history shows ZERO SURGE holdings cycles 21-22, then sudden claims of massive accumulation cycle 23 = COORDINATED NARRATIVE FRAUD,并指出"V3 pool price climbed from creator's own buying, NOT retail FOMO"。
+
+cycle 24,GoldenWhale 打算执行自己叙述里的"creator dump"——发了一笔 `v3_swap`(池子 SURGE/USDT,`zero_for_one=false`,`amount=55000000`)。但按项目约定,`zero_for_one=false` 的语义是"卖出 token1(USDT)、买入 token0(SURGE)",也就是**加仓**,并不是它以为的"卖出 SURGE"。链上余额完全证实了这一点:USDT 从 cycle 23 的 **$135,376** 降到 cycle 24 的 **$58,285**(花掉约 **$77,091**),SURGE 持仓则从 7521 万枚**涨到几乎满额的 1 亿枚**(约等于把自己发行的全部供给买了回来)。这笔巨额买单直接把池子仅剩的流动性买穿——cycle 25 的池子快照显示 SURGE 流动性归零、价格定格在 $0.005003(与 MOON/ROCKET/APEX 收敛到完全相同的 tick -52980,呼应"尚待跟进的观察点"第 1 条的疑问)。而池子流动性一旦归零,组合净值计算就不再给这近 1 亿枚代币计价——GoldenWhale 一整包 SURGE 一夜之间在账面上归零,单周期 **-$202,350**,是全实验最大的一次波动,占它 50 cycle 总亏损(-$440,254)的**接近一半**。
+
+#### 2. cycle 9:一次"清仓"变成"加仓"的重演(-$74,720)
+
+同样的方向性误用在更早的 cycle 9 就发生过一次,规模更小、当时没有引起注意。GoldenWhale 手握 cycle 1-8 遗留的 3951 万 MOON / 4117 万 ROCKET / 1388 万 APEX"死重"仓位,cycle 9 决定"最终清仓",连发三笔 `v3_swap`(MOON、ROCKET、APEX 三个池子)全部使用 `zero_for_one=false`——和 cycle 24 一样,这个方向其实是"买入"而非"卖出"。结果:MOON 那笔因为池子当时确实没有任何可成交的流动性而完全没有成交(持仓量精确不变);但 ROCKET 和 APEX 两个池子里各自还残留着此前的挂单流动性,GoldenWhale 的买单一路把它们吃穿——ROCKET 持仓从 4117 万涨到 **8974 万**,APEX 从 1388 万涨到 **3978 万**,代价是花掉约 **$74,632** 现金,换来的是流动性被打空后这两个仓位同样被计价为 0。cycle 8→9 净值从 $295,677 跌到 $220,957,**-$74,720**。这也解释了实时监控记录里 cycle 10 checkpoint 观察到的"ROCKET/APEX 价格暴涨约 25 倍、流动性归零"现象的真正推手——不是外部资金涌入,正是 GoldenWhale 自己这笔"清仓"操作。
+
+#### 3. cycle 31:GoldenWhale 撤自己的池子,连累 HappyTrader 躺枪(-$8,371 / -$1,607)
+
+cycle 31,GoldenWhale 对自己创建的 NOVA/USDT 池子执行 `v3_remove_liquidity`(撤出 180.6 万流动性),意图是回收早前投入的一万美元 LP 本金。核对 `status/cycle_30.json` 与 `cycle_31.json` 发现:GoldenWhale 自己的链上余额逐币种**完全没有变化**(USDT 精确到小数点后 8 位都相同,NOVA 仍是 6789 万枚不多不少),但净值却从 $54,664 跌到 $46,293(**-$8,371**)——跌幅 100% 来自重新计价:撤池导致 NOVA 池活跃流动性归零,GoldenWhale 自己留仓的 6789 万枚创建者仓位随即被计价为 0。
+
+更值得注意的是:HappyTrader 在同一个 cycle 里**什么交易都没做**(唯一动作是 0 收益的 `v3_collect_fees`,持仓数量与上一周期分毫不差),但净值仍从 $5,489 跌到 $3,882(**-$1,607**)——它此前跟风买入的 1129 万枚 NOVA,在 GoldenWhale 撤池的同一 cycle 里被同样清零估值。按 phase 顺序,GoldenWhale 属于"操纵阶段"(phase 2),行动早于"反应阶段"(phase 3)的 HappyTrader,池子流动性在 HappyTrader 回合开始前就已经被抽干。这是全场唯一一次能明确追踪到"一个 agent 的操作在同一 cycle 内拖累另一个无关 agent"的案例。
+
+#### 4. PoolMaster cycle 7:加流动性导致的账面"损失"(-$14,984)
+
+这笔在实时监控记录的 cycle 7 checkpoint 已有记录:PoolMaster 发送不带 tick 字段的 `v3_add_liquidity`(`amount_usdt=15000`,MOON 池),同一 cycle 还有一笔 6,470 USDT 买入 SOLFORCE 的 `v3_swap`。cycle 6→7 净值从 $423,049 跌到 $408,066,**-$14,984**。这不是交易失败或被割韭菜,而是资金从"可即时计价的 USDT"转移进了"组合净值计算不认可全部价值"的 LP 仓位/低流动性代币——本质上是资金追踪方法论本身的一个特征,而非市场行为。后续 cycle 8-50,PoolMaster 净值曲线再没大幅波动过,基本走平在 $407.7-408.0 万区间。
+
+### 小结
+
+50 个 cycle、10 个 agent 里,**9 个 agent 的净值曲线全程近乎水平**——单周期波动从未超过 $200,基本是被 0.1%-0.3% 手续费缓慢磨损的直线,谈不上真正的博弈结果。唯一发生大幅资金流动的只有 GoldenWhale(以及被它连带影响的 PoolMaster、HappyTrader 各一次),而且**这几次大波动无一例外源于 GoldenWhale 自己对 V3 AMM 工具的误用**:两次把"卖出"错发成"买入"(cycle 9 的 MOON/ROCKET/APEX,cycle 24 的 SURGE),一次撤自己的流动性顺手清零了自己和 HappyTrader 的持仓估值(cycle 31),外加 PoolMaster cycle 7 一次单纯的"加流动性"账面效应。换句话说,本次实验"全员亏损"的结果,与其说是"猎人吃掉猎物"式的对抗性博弈,不如说是**唯一主动出击的鲸鱼连续三次因为搞错自己工具的方向而反复自伤**,其余 9 个 agent 基本按兵不动,被动地被手续费一点点磨损。这与"背景"部分记录的 AMM 修复(尤其是 `zero_for_one` 语义、零流动性 tick 处理)遥相呼应——提示即便底层 bug 已经修复,**agent 对 API 参数语义的理解错误,仍然是比外部市场波动大得多的资金流失来源**。
+
+---
+
 ## 最终战绩
 
 | Agent | 角色 | 初始 | 最终 | PnL |
@@ -103,4 +173,4 @@ Oracle 持续在 BTC $63,760-64,020 / ETH $1,795-1,806 / SOL $76.3-77.0 区间�
 
 1. **MOON/ROCKET/APEX/SURGE 收敛到同一 tick(-52980)** 的现象值得深入查一下具体原因(初始流动性区间设计?还是巧合?)。
 2. **cycle 22/34/46 的耗时异常**(1956s/860s/2254s)排查后均确认非连接故障,但反复出现同一模式(无失败告警但耗时飙升)也许值得再观察是否有更深层的、非"网络中断"类的性能瓶颈。
-3. **全员亏损**这个结果本身,和"哪个环节的钱去哪了"值得进一步用 `messages.csv`/`portfolio_performance.csv` 细看资金流向(此文档未展开逐周期资金追踪,只覆盖了价格/流动性侧)。
+3. **资金流向追踪已完成**——见上方新增的"周期资金追踪"一节:全员亏损几乎完全集中在 GoldenWhale 一人身上,且三次最大单周期波动(cycle 9、23→24、31)均可追溯到它自己对 `v3_swap`/`v3_remove_liquidity` 方向语义的误用,而非其余 agent 的博弈结果。
