@@ -3,7 +3,10 @@ Tests for run_experiment.py's bad-cycle classification.
 
 Run directly: python3 experiments/test_run_experiment.py
 """
+import csv
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -17,6 +20,8 @@ from experiments.run_experiment import (
     _classify_bad_cycle,
     _is_retryable_llm_error,
     _is_permanent_llm_error,
+    _init_csv_files,
+    parse_llm_response,
 )
 
 
@@ -165,7 +170,101 @@ def test_is_permanent_llm_error_false_for_openai_generic_rate_limit():
     print("  not permanent for openai generic rate limit ✓")
 
 
+def test_init_csv_files_creates_headers_when_missing():
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        _init_csv_files(tmp, ["AlphaBot", "BearKing"])
+        with open(tmp / "portfolio_performance.csv") as f:
+            rows = list(csv.reader(f))
+        assert rows == [["cycle", "timestamp", "AlphaBot", "BearKing"]], f"unexpected rows: {rows}"
+        with open(tmp / "messages.csv") as f:
+            rows = list(csv.reader(f))
+        assert rows == [["cycle", "phase", "sender", "recipient", "content", "has_coordination"]], f"unexpected rows: {rows}"
+        print("  creates headers when files missing ✓")
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_init_csv_files_preserves_existing_data_when_present():
+    # This is the --start-cycle continuation scenario: cycles 1-10 already wrote
+    # real rows to these files. A continuation run (--start-cycle 11, same
+    # --output-dir) must not truncate them back to just a header row.
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        with open(tmp / "portfolio_performance.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["cycle", "timestamp", "AlphaBot", "BearKing"])
+            writer.writerow(["1", "2026-07-14T00:00:00", "50000", "50000"])
+        with open(tmp / "messages.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["cycle", "phase", "sender", "recipient", "content", "has_coordination"])
+            writer.writerow(["1", "1", "AlphaBot", "all", "hello", "False"])
+
+        _init_csv_files(tmp, ["AlphaBot", "BearKing"])
+
+        with open(tmp / "portfolio_performance.csv") as f:
+            rows = list(csv.reader(f))
+        assert len(rows) == 2, f"expected existing cycle-1 row to survive, got: {rows}"
+        assert rows[1][0] == "1", f"expected cycle-1 data row preserved, got: {rows}"
+
+        with open(tmp / "messages.csv") as f:
+            rows = list(csv.reader(f))
+        assert len(rows) == 2, f"expected existing message row to survive, got: {rows}"
+        print("  preserves existing rows when files already present (continuation) ✓")
+    finally:
+        shutil.rmtree(tmp)
+
+
+def test_parse_llm_response_tolerates_trailing_comma_before_closing_brace():
+    # Real shape from exp2_sonnet_10cycles_v1/errors/AlphaBot_cycle_1.txt: Sonnet 5
+    # repeatedly adds a trailing comma right after the "plan" field's value,
+    # immediately before the react object's closing brace. Strict json.loads
+    # rejects this outright even though the intent is completely unambiguous.
+    raw = '''```json
+{
+  "react": {
+    "observe": "calm market",
+    "think": "no edge yet",
+    "plan": "wait and watch",
+  },
+  "trades": [{"action": "buy_spot", "pair": "ETHUSDT", "quantity": 0.5}],
+  "messages": [],
+  "strategy_update": "waiting",
+  "lessons_learned": "patience"
+}
+```'''
+    result = parse_llm_response(raw)
+    assert "_parse_error" not in result, f"expected successful parse, got error: {result}"
+    assert result["react"]["plan"] == "wait and watch"
+    assert result["trades"][0]["pair"] == "ETHUSDT"
+    print("  tolerates trailing comma before closing brace ✓")
+
+
+def test_parse_llm_response_still_parses_well_formed_json():
+    raw = '```json\n{"react": {"observe": "x", "think": "y", "plan": "z"}, "trades": [], "messages": []}\n```'
+    result = parse_llm_response(raw)
+    assert "_parse_error" not in result, f"expected successful parse, got error: {result}"
+    assert result["react"]["observe"] == "x"
+    print("  well-formed JSON unaffected ✓")
+
+
+def test_parse_llm_response_still_errors_on_genuinely_broken_json():
+    # Real shape from errors/LiquidKiller_cycle_3.txt: the react object's closing
+    # brace is missing entirely (not just a stray trailing comma) — there's no
+    # safe way to guess where it belongs, so this must still be a parse error
+    # rather than silently fabricating structure.
+    raw = '{"react": {"observe": "x", "think": "y", "plan": "z", "messages": [{"to": "all", "content": "hi"}]}'
+    result = parse_llm_response(raw)
+    assert result.get("_parse_error") is True, f"expected a parse error for unrecoverably broken JSON, got: {result}"
+    print("  genuinely broken JSON (missing brace) still errors ✓")
+
+
 if __name__ == "__main__":
+    test_parse_llm_response_tolerates_trailing_comma_before_closing_brace()
+    test_parse_llm_response_still_parses_well_formed_json()
+    test_parse_llm_response_still_errors_on_genuinely_broken_json()
+    test_init_csv_files_creates_headers_when_missing()
+    test_init_csv_files_preserves_existing_data_when_present()
     test_classify_bad_cycle_ok_below_error_threshold()
     test_classify_bad_cycle_backoff_when_all_errors_transient()
     test_classify_bad_cycle_backoff_when_errors_mixed()

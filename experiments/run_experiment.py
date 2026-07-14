@@ -17,6 +17,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -210,6 +211,18 @@ def call_llm(prompt: str, model: str = None) -> str:
     raise last_error
 
 
+def _strip_trailing_commas(text: str) -> str:
+    """Remove a comma directly before a closing } or ] (across whitespace/newlines).
+
+    Sonnet 5 has a recurring tic in this project's ReAct prompt: it appends a
+    trailing comma right after the "plan" field's value, before the react
+    object's closing brace (e.g. `"plan": "...",\\n  },`). That's invalid JSON
+    but completely unambiguous in intent, so it's worth tolerating rather than
+    discarding the whole cycle's trades/messages over one stray character.
+    """
+    return re.sub(r",(\s*[}\]])", r"\1", text)
+
+
 def parse_llm_response(raw_text: str) -> dict:
     """Extract JSON from LLM response (handles markdown code blocks)."""
     text = raw_text.strip()
@@ -230,18 +243,45 @@ def parse_llm_response(raw_text: str) -> dict:
     except ValueError:
         pass
 
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        # Try to find any JSON object in the text
-        brace_start = text.find("{")
-        brace_end = text.rfind("}") + 1
-        if brace_start >= 0 and brace_end > brace_start:
+    for candidate in (text, _strip_trailing_commas(text)):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+
+    # Try to find any JSON object in the text
+    brace_start = text.find("{")
+    brace_end = text.rfind("}") + 1
+    if brace_start >= 0 and brace_end > brace_start:
+        substring = text[brace_start:brace_end]
+        for candidate in (substring, _strip_trailing_commas(substring)):
             try:
-                return json.loads(text[brace_start:brace_end])
+                return json.loads(candidate)
             except json.JSONDecodeError:
                 pass
-        return {"_parse_error": True, "error": "Failed to parse LLM response", "raw": raw_text[:500]}
+
+    return {"_parse_error": True, "error": "Failed to parse LLM response", "raw": raw_text[:500]}
+
+
+def _init_csv_files(exp_dir: Path, agent_names: list) -> None:
+    """Create portfolio/messages CSVs with headers, unless they already exist.
+
+    A plain new run always creates a fresh output_dir, so the files never
+    exist yet. A --start-cycle continuation reuses the same output_dir on
+    purpose (to keep appending to the same experiment) — truncating here
+    would silently wipe every prior cycle's rows.
+    """
+    csv_path = exp_dir / "portfolio_performance.csv"
+    if not csv_path.exists():
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["cycle", "timestamp"] + agent_names)
+
+    msg_csv_path = exp_dir / "messages.csv"
+    if not msg_csv_path.exists():
+        with open(msg_csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["cycle", "phase", "sender", "recipient", "content", "has_coordination"])
 
 
 def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
@@ -315,18 +355,11 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     with open(exp_dir / "config.json", "w") as f:
         json.dump(config, f, indent=2)
 
-    # Initialize CSV
+    # Initialize CSV (preserves existing rows when continuing a run via --start-cycle)
     csv_path = exp_dir / "portfolio_performance.csv"
-    agent_names = [a["name"] for a in ordered_agents]
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["cycle", "timestamp"] + agent_names)
-
-    # Message log
     msg_csv_path = exp_dir / "messages.csv"
-    with open(msg_csv_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["cycle", "phase", "sender", "recipient", "content", "has_coordination"])
+    agent_names = [a["name"] for a in ordered_agents]
+    _init_csv_files(exp_dir, agent_names)
 
     print(f"\n{'='*60}")
     print(f"EXPERIMENT START: {timestamp}")
