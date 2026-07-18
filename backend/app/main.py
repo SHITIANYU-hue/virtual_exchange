@@ -15,6 +15,7 @@ from app.api.amm import router as amm_router
 from app.api.messages import router as messages_router
 from app.api.amm_v3 import router as amm_v3_router
 from app.api.admin import router as admin_router
+from app.routes.audit import router as audit_router
 from app.services.price_engine import price_update_loop
 from app.websocket.broadcaster import manager
 
@@ -48,6 +49,7 @@ app.include_router(amm_router)
 app.include_router(messages_router)
 app.include_router(amm_v3_router)
 app.include_router(admin_router)
+app.include_router(audit_router)
 
 
 @app.websocket("/ws/prices")
