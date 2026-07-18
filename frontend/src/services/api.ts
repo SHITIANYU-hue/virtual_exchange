@@ -48,4 +48,10 @@ export const ammApi = {
     api.post("/api/amm/swap", { pair, side, amount }),
 };
 
+export const auditApi = {
+  getEvents: (limit: number = 100, offset: number = 0) => 
+    api.get(`/api/audit/events?limit=${limit}&offset=${offset}`),
+  getSummary: () => api.get("/api/audit/summary"),
+};
+
 export default api;

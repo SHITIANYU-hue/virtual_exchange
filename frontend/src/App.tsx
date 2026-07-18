@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import SpotTrading from "./pages/SpotTrading";
 import FuturesTrading from "./pages/FuturesTrading";
+import AuditDashboard from "./pages/AuditDashboard";
 import Login from "./pages/Login";
 
 export default function App() {
@@ -16,12 +17,14 @@ export default function App() {
         <Link to="/" style={{ marginRight: 20 }}>Dashboard</Link>
         <Link to="/spot" style={{ marginRight: 20 }}>Spot</Link>
         <Link to="/futures" style={{ marginRight: 20 }}>Futures</Link>
+        <Link to="/audit" style={{ marginRight: 20 }}>Auditor</Link>
         <button onClick={() => { localStorage.removeItem("token"); setLoggedIn(false); }}>Logout</button>
       </nav>
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/spot" element={<SpotTrading />} />
         <Route path="/futures" element={<FuturesTrading />} />
+        <Route path="/audit" element={<AuditDashboard />} />
       </Routes>
     </BrowserRouter>
   );
