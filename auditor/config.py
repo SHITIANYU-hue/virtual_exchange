@@ -1,5 +1,6 @@
 """Auditor configuration."""
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -25,7 +26,7 @@ class AuditorConfig:
     block_threshold: float = 0.8
     flag_threshold: float = 0.4
     mode: str = 'block_and_flag'  # Updated to block_and_flag per user instruction
-    llm_model: str = 'claude-sonnet-4-20250514'  # Claude-sonnet
+    llm_model: str = field(default_factory=lambda: os.environ.get('AUDITOR_LLM_MODEL', 'claude-haiku-4-5-20251001'))  # override via AUDITOR_LLM_MODEL
     llm_timeout: float = 10.0
     cache_enabled: bool = True
     cache_max_size: int = 1000

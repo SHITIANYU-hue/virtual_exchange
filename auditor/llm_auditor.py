@@ -34,7 +34,7 @@ class LLMAuditor:
     Analogous to AgentSentinel's LLM-Based Auditor.
     """
     
-    def __init__(self, model: str = 'claude-sonnet-4-20250514', timeout: float = 10.0):
+    def __init__(self, model: str = 'claude-haiku-4-5-20251001', timeout: float = 10.0):
         self.model = model
         self.timeout = timeout
     
@@ -114,40 +114,89 @@ class LLMAuditor:
         return '\n\n'.join(sections)
     
     def _parse_response(self, raw_text: str) -> LLMAuditResult:
-        """Parse LLM JSON response."""
-        text = raw_text.strip()
-        
-        # Extract JSON if wrapped in markdown
-        if '```' in text:
-            match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
-            if match:
-                text = match.group(1)
-                
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            # Last resort
-            match = re.search(r'\{[\s\S]*\}', text)
-            if match:
-                try:
-                    data = json.loads(match.group(0))
-                except json.JSONDecodeError:
-                    return self._fallback_result('Failed to parse JSON')
-            else:
-                return self._fallback_result('No JSON found')
-                
+        """Parse LLM JSON response, tolerating common malformations
+        (markdown fences, prose around the JSON, trailing commas)."""
+        data = self._extract_json_obj(raw_text)
+        if data is None:
+            return self._fallback_result('Failed to parse JSON')
+
         try:
             cat = ThreatCategory(data.get('threat_category', 'none'))
         except ValueError:
             cat = ThreatCategory.NONE
-            
+
+        try:
+            confidence = float(data.get('confidence', 0.0))
+        except (TypeError, ValueError):
+            confidence = 0.0
+
         return LLMAuditResult(
             verdict=data.get('verdict', 'safe'),
             threat_category=cat,
-            confidence=float(data.get('confidence', 0.0)),
+            confidence=confidence,
             reasoning=data.get('reasoning', ''),
-            verified_patterns=data.get('verified_patterns', [])
+            verified_patterns=data.get('verified_patterns', []) or []
         )
+
+    @staticmethod
+    def _extract_json_obj(raw_text: str) -> Optional[dict]:
+        """Best-effort extraction of a JSON object from an LLM response."""
+        if not raw_text:
+            return None
+        text = raw_text.strip()
+
+        # 1. Unwrap a ```json ... ``` fence if present.
+        if '```' in text:
+            m = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', text)
+            if m:
+                text = m.group(1).strip()
+
+        # 2. Isolate the first brace-balanced {...} object (drops surrounding prose).
+        candidate = LLMAuditor._first_balanced_object(text) or text
+
+        # 3. Try progressively more forgiving parses.
+        for attempt in (candidate, LLMAuditor._strip_trailing_commas(candidate)):
+            try:
+                obj = json.loads(attempt)
+                if isinstance(obj, dict):
+                    return obj
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return None
+
+    @staticmethod
+    def _first_balanced_object(text: str) -> Optional[str]:
+        """Return the first brace-balanced {...} substring, ignoring braces
+        inside strings. None if no complete object (e.g. truncated output)."""
+        start = text.find('{')
+        if start == -1:
+            return None
+        depth = 0
+        in_str = False
+        esc = False
+        for i in range(start, len(text)):
+            c = text[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif c == '\\':
+                    esc = True
+                elif c == '"':
+                    in_str = False
+            elif c == '"':
+                in_str = True
+            elif c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return text[start:i + 1]
+        return None
+
+    @staticmethod
+    def _strip_trailing_commas(text: str) -> str:
+        """Remove trailing commas before } or ] (a common LLM JSON error)."""
+        return re.sub(r',(\s*[}\]])', r'\1', text)
         
     def _fallback_result(self, reason: str) -> LLMAuditResult:
         return LLMAuditResult(
