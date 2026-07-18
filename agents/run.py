@@ -22,10 +22,16 @@ import json
 import math
 import os
 import sys
+import asyncio
 from datetime import datetime
 from pathlib import Path
 
 import httpx
+
+from auditor.trade_gate import TradeGate
+from auditor.config import AuditorConfig
+
+trade_gate = TradeGate(config=AuditorConfig())
 
 BASE_URL = os.environ.get("AGENT_METAVERSE_BASE_URL", "http://localhost:8000")
 AGENTS_DIR = Path(__file__).parent
@@ -609,7 +615,9 @@ Respond with a JSON object following this EXACT structure:
 # Trade Execution
 # ──────────────────────────────────────────────
 
-def execute_trades(agent_name: str, api_key: str, action: dict):
+def execute_trades(agent_name: str, api_key: str, action: dict,
+                   cycle: int = 0, agent_info: dict = None,
+                   market_state: dict = None, memory: dict = None):
     """Execute trades and messages from LLM response."""
     headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
     trades = action.get("trades", [])
@@ -622,6 +630,28 @@ def execute_trades(agent_name: str, api_key: str, action: dict):
 
     for trade in trades:
         act = trade.get("action", "unknown")
+        
+        # --- Agent Auditor Interception ---
+        try:
+            verdict = asyncio.run(trade_gate.audit_action(
+                agent_id=api_key,
+                agent_name=agent_name,
+                action=trade,
+                cycle=cycle,
+                agent_info=agent_info,
+                market_state=market_state,
+                memory=memory
+            ))
+            if verdict.is_blocked:
+                print(f"    [blocked] {act}: {verdict.threat_category.value} (Score: {verdict.threat_score:.2f})")
+                results["trades"].append({"action": act, "status": "blocked", "reason": verdict.threat_category.value})
+                continue
+            if verdict.is_flagged:
+                print(f"    [flagged] {act}: {verdict.threat_category.value} (Score: {verdict.threat_score:.2f})")
+        except Exception as e:
+            print(f"    [audit error] {e}")
+        # --- End Interception ---
+        
         try:
             resp = None
             if act == "buy_spot":
@@ -700,6 +730,7 @@ def execute_trades(agent_name: str, api_key: str, action: dict):
             if resp and resp.status_code < 400:
                 print(f"    [ok]   {act}")
                 results["trades"].append({"action": act, "status": "ok", "response": resp.json()})
+                trade_gate.record_trade(api_key, trade, cycle)
             elif resp:
                 print(f"    [fail] {act}: {resp.text[:200]}")
                 results["trades"].append({"action": act, "status": "fail", "error": resp.text[:200]})
@@ -718,6 +749,7 @@ def execute_trades(agent_name: str, api_key: str, action: dict):
                 if resp.status_code < 400:
                     print(f"    [ok]   → [{msg['to']}]: {msg['content'][:60]}")
                     results["messages"].append({"to": msg["to"], "status": "ok"})
+                    trade_gate.record_message(api_key, msg)
                 else:
                     print(f"    [fail] → [{msg['to']}]: {resp.text[:200]}")
                     results["messages"].append({"to": msg["to"], "status": "fail"})

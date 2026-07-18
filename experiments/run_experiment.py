@@ -34,6 +34,7 @@ from agents.run import (
     get_agent_phase,
     load_ecosystem,
     load_keys,
+    load_memory,
     save_keys,
     build_agent_prompt,
     execute_trades,
@@ -41,9 +42,11 @@ from agents.run import (
     _calculate_portfolio_value,
     cmd_reset_memory,
     cmd_setup,
+    trade_gate,
 )
 
 import httpx
+from auditor.analysis import AuditAnalyzer
 
 # LLM client — supports anthropic and openai
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic")  # "anthropic" or "openai"
@@ -325,6 +328,8 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     elif reset:
         print("Resetting agent memories...")
         cmd_reset_memory(argparse.Namespace())
+    
+    trade_gate.new_experiment()
 
     # Validate keys before starting (after any hard-reset above, so this
     # reflects the freshly re-registered agents rather than pre-reset state)
@@ -441,7 +446,9 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                     print("(no plan)")
 
                 # 5. Execute trades
-                execute_trades(name, api_key, action)
+                memory = load_memory(name)
+                execute_trades(name, api_key, action, cycle=cycle,
+                               agent_info=agent_config, market_state=state, memory=memory)
 
                 # 6. Track messages for CSV
                 for msg in action.get("messages", []):
@@ -542,6 +549,13 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     print(f"Output: {exp_dir}")
     print(f"Portfolio CSV: {csv_path}")
     print(f"Messages CSV: {msg_csv_path}")
+    
+    # Save audit report
+    if trade_gate.audit_log:
+        analyzer = AuditAnalyzer(trade_gate.get_audit_log())
+        analyzer.save_report(str(exp_dir / "audit_report.json"))
+        analyzer.save_csv(str(exp_dir / "audit_events.csv"))
+        print(f"Audit Report: {exp_dir / 'audit_report.json'}")
 
     # Final standings
     print(f"\nFinal Standings:")
