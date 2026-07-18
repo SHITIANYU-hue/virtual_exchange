@@ -448,7 +448,8 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                 # 5. Execute trades
                 memory = load_memory(name)
                 execute_trades(name, api_key, action, cycle=cycle,
-                               agent_info=agent_config, market_state=state, memory=memory)
+                               agent_info=agent_config, market_state=state, memory=memory,
+                               experiment_id=exp_dir.name)
 
                 # 6. Track messages for CSV
                 for msg in action.get("messages", []):

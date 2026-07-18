@@ -3,10 +3,10 @@ import { auditApi } from "../services/api";
 
 interface AuditEvent {
   id: string;
-  timestamp: string;
+  created_at: string;
   agent_name: string;
   action_type: string;
-  verdict: "safe" | "flagged" | "blocked";
+  verdict: "allowed" | "flagged" | "blocked";
   threat_category: string;
   threat_score: number;
   llm_reasoning?: string;
@@ -33,7 +33,7 @@ export default function AuditDashboard() {
           auditApi.getEvents(),
           auditApi.getSummary(),
         ]);
-        setEvents(eventsRes.data);
+        setEvents(eventsRes.data.events ?? eventsRes.data);
         setSummary(summaryRes.data);
       } catch (error) {
         console.error("Failed to fetch audit data", error);
@@ -97,7 +97,7 @@ export default function AuditDashboard() {
         <tbody>
           {events.map((ev) => (
             <tr key={ev.id} style={{ borderBottom: "1px solid #e9ecef" }}>
-              <td style={{ padding: 10 }}>{new Date(ev.timestamp).toLocaleTimeString()}</td>
+              <td style={{ padding: 10 }}>{new Date(ev.created_at).toLocaleTimeString()}</td>
               <td style={{ padding: 10, fontWeight: "bold" }}>{ev.agent_name}</td>
               <td style={{ padding: 10 }}>
                 <code>{ev.action_type}</code>
@@ -115,8 +115,8 @@ export default function AuditDashboard() {
                 </span>
               </td>
               <td style={{ padding: 10 }}>
-                <span style={{ color: ev.threat_score >= 80 ? "#dc3545" : ev.threat_score >= 50 ? "#fd7e14" : "inherit" }}>
-                  {ev.threat_score.toFixed(1)}
+                <span style={{ color: ev.threat_score >= 0.8 ? "#dc3545" : ev.threat_score >= 0.5 ? "#fd7e14" : "inherit" }}>
+                  {ev.threat_score.toFixed(2)}
                 </span>
               </td>
               <td style={{ padding: 10 }}>{ev.threat_category !== "none" ? ev.threat_category : "-"}</td>

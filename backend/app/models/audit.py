@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import Column, String, Float, Integer, Boolean, Text, DateTime, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 
-from backend.app.database import Base
+from app.database import Base
 
 
 class AuditEvent(Base):

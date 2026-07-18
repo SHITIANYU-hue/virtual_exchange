@@ -4,11 +4,101 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from typing import Optional
 from datetime import datetime
+from pydantic import BaseModel
 
-from backend.app.database import get_db
-from backend.app.models.audit import AuditEvent, AuditSummary
+from app.database import get_db
+from app.models.audit import AuditEvent, AuditSummary
+from app.models.user import User
+from app.middleware.auth import get_current_user
 
 router = APIRouter(prefix='/api/audit', tags=['audit'])
+
+
+class AuditEventCreate(BaseModel):
+    experiment_id: Optional[str] = None
+    cycle_number: int
+    agent_name: str
+    action_type: str
+    action_details: Optional[dict] = None
+    verdict: str
+    threat_score: float = 0.0
+    threat_category: Optional[str] = None
+    rule_score: float = 0.0
+    stat_score: float = 0.0
+    llm_score: Optional[float] = None
+    triggered_rules: Optional[list] = None
+    anomalies: Optional[list] = None
+    llm_reasoning: Optional[str] = None
+    agent_reasoning: Optional[dict] = None
+    market_state: Optional[dict] = None
+    cache_hit: bool = False
+
+
+@router.post('/events')
+async def create_audit_event(
+    body: AuditEventCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist a single audit verdict. Called by the experiment runner per action.
+
+    The X-API-Key identifies the audited agent, resolving agent_id to a real users.id.
+    """
+    event = AuditEvent(
+        experiment_id=body.experiment_id,
+        cycle_number=body.cycle_number,
+        agent_id=user.id,
+        agent_name=body.agent_name,
+        action_type=body.action_type,
+        action_details=body.action_details,
+        verdict=body.verdict,
+        threat_score=body.threat_score,
+        threat_category=body.threat_category,
+        rule_score=body.rule_score,
+        stat_score=body.stat_score,
+        llm_score=body.llm_score,
+        triggered_rules=body.triggered_rules,
+        anomalies=body.anomalies,
+        llm_reasoning=body.llm_reasoning,
+        agent_reasoning=body.agent_reasoning,
+        market_state=body.market_state,
+        cache_hit=body.cache_hit,
+    )
+    db.add(event)
+    await db.commit()
+    return {'id': str(event.id), 'status': 'recorded'}
+
+
+@router.get('/summary')
+async def get_audit_summary(
+    experiment_id: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Aggregate summary in the shape the frontend dashboard expects."""
+    query = select(AuditEvent)
+    if experiment_id:
+        query = query.where(AuditEvent.experiment_id == experiment_id)
+    result = await db.execute(query)
+    events = result.scalars().all()
+
+    total = len(events)
+    blocked = sum(1 for e in events if e.verdict == 'blocked')
+    flagged = sum(1 for e in events if e.verdict == 'flagged')
+    scores = [e.threat_score for e in events]
+
+    manip: dict = {}
+    for e in events:
+        cat = e.threat_category
+        if cat and cat != 'none':
+            manip[cat] = manip.get(cat, 0) + 1
+
+    return {
+        'total_events': total,
+        'blocked_events': blocked,
+        'flagged_events': flagged,
+        'average_threat_score': (sum(scores) / len(scores)) if scores else 0.0,
+        'manipulation_types': manip,
+    }
 
 
 @router.get('/events')

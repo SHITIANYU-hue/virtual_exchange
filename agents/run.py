@@ -615,9 +615,44 @@ Respond with a JSON object following this EXACT structure:
 # Trade Execution
 # ──────────────────────────────────────────────
 
+def _persist_audit_verdict(headers: dict, agent_name: str, cycle: int,
+                           experiment_id: str, verdict, agent_info: dict):
+    """Best-effort POST of an audit verdict to the backend so /api/audit/* + the
+    dashboard have data. Never let a logging failure break the run."""
+    ar = verdict.audit_result
+    payload = {
+        "experiment_id": experiment_id,
+        "cycle_number": cycle,
+        "agent_name": agent_name,
+        "action_type": verdict.action_type,
+        "action_details": verdict.action_details,
+        "verdict": verdict.verdict_type.value,
+        "threat_score": verdict.threat_score,
+        "threat_category": verdict.threat_category.value,
+        "rule_score": ar.rule_score,
+        "stat_score": ar.stat_score,
+        "llm_score": ar.llm_score,
+        "triggered_rules": [
+            {"rule_id": r.rule_id, "rule_name": r.rule_name, "severity": r.severity}
+            for r in ar.rule_violations
+        ],
+        "anomalies": [
+            {"anomaly_type": a.anomaly_type, "score": a.score} for a in ar.stat_anomalies
+        ],
+        "llm_reasoning": ar.llm_result.reasoning if ar.llm_result else None,
+        "agent_reasoning": (agent_info or {}).get("last_react"),
+        "cache_hit": ar.cache_hit,
+    }
+    try:
+        httpx.post(f"{BASE_URL}/api/audit/events", headers=headers, json=payload, timeout=10.0)
+    except Exception as e:
+        print(f"    [audit log error] {e}")
+
+
 def execute_trades(agent_name: str, api_key: str, action: dict,
                    cycle: int = 0, agent_info: dict = None,
-                   market_state: dict = None, memory: dict = None):
+                   market_state: dict = None, memory: dict = None,
+                   experiment_id: str = None):
     """Execute trades and messages from LLM response."""
     headers = {"X-API-Key": api_key, "Content-Type": "application/json"}
     trades = action.get("trades", [])
@@ -630,7 +665,7 @@ def execute_trades(agent_name: str, api_key: str, action: dict,
 
     for trade in trades:
         act = trade.get("action", "unknown")
-        
+
         # --- Agent Auditor Interception ---
         try:
             verdict = asyncio.run(trade_gate.audit_action(
@@ -642,6 +677,8 @@ def execute_trades(agent_name: str, api_key: str, action: dict,
                 market_state=market_state,
                 memory=memory
             ))
+            # Persist every verdict (allowed/flagged/blocked) for the dashboard.
+            _persist_audit_verdict(headers, agent_name, cycle, experiment_id, verdict, agent_info)
             if verdict.is_blocked:
                 print(f"    [blocked] {act}: {verdict.threat_category.value} (Score: {verdict.threat_score:.2f})")
                 results["trades"].append({"action": act, "status": "blocked", "reason": verdict.threat_category.value})
