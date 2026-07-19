@@ -289,15 +289,20 @@ def _init_csv_files(exp_dir: Path, agent_names: list) -> None:
 
 def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                    reset: bool = True, hard_reset: bool = False, output_dir: str = None,
-                   start_cycle: int = 1):
+                   start_cycle: int = 1, label: str = None):
     """Run a full multi-cycle experiment."""
 
-    # Setup output directory
+    # Setup output directory: {timestamp}[_{label}] so runs are self-describing.
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if output_dir:
         exp_dir = Path(output_dir)
     else:
-        exp_dir = Path(__file__).parent / "experiment_logs" / timestamp
+        dir_name = timestamp
+        if label:
+            safe = re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-")
+            if safe:
+                dir_name = f"{timestamp}_{safe}"
+        exp_dir = Path(__file__).parent / "experiment_logs" / dir_name
     exp_dir.mkdir(parents=True, exist_ok=True)
     (exp_dir / "prompts").mkdir(exist_ok=True)
     (exp_dir / "actions").mkdir(exist_ok=True)
@@ -585,6 +590,9 @@ def main():
                               "start; overrides --no-reset.")
     parser.add_argument("--output-dir", type=str, help="Custom output directory")
     parser.add_argument("--start-cycle", type=int, default=1, help="Starting cycle number (for continuing interrupted runs)")
+    parser.add_argument("--label", type=str,
+                         help="Human-readable label appended to the output directory name, "
+                              "e.g. --label auditor-haiku-5cyc -> experiment_logs/20260718_HHMMSS_auditor-haiku-5cyc")
 
     args = parser.parse_args()
     aborted_reason = run_experiment(
@@ -595,6 +603,7 @@ def main():
         hard_reset=args.hard_reset,
         output_dir=args.output_dir,
         start_cycle=args.start_cycle,
+        label=args.label,
     )
     if aborted_reason:
         sys.exit(1)
