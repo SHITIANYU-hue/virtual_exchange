@@ -48,6 +48,10 @@ from agents.run import (
 import httpx
 from auditor.analysis import AuditAnalyzer
 
+# Discovery agent (open-set pattern mining), off by default; every K cycles.
+DISCOVERY_ENABLED = os.environ.get("DISCOVERY_ENABLED", "0") == "1"
+DISCOVERY_K = int(os.environ.get("DISCOVERY_K", "5"))
+
 # LLM client — supports anthropic and openai
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "anthropic")  # "anthropic" or "openai"
 LLM_MODEL = os.environ.get("LLM_MODEL", "claude-sonnet-4-20250514")
@@ -515,6 +519,17 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                 json.dump(all_status, f, indent=2)
         except Exception as e:
             print(f"  [status snapshot error] {e}")
+
+        # Phase 5: Discovery — open-set pattern mining over the last K cycles.
+        if DISCOVERY_ENABLED and cycle % DISCOVERY_K == 0:
+            window_start = max(1, cycle - DISCOVERY_K + 1)
+            print(f"\n  ── Phase 5: Discovery (cycles {window_start}-{cycle}) ──")
+            try:
+                from discovery import DiscoveryAgent
+                res = DiscoveryAgent(BASE_URL).run(exp_dir.name, cycle, window_start)
+                print(f"  [discovery] {res['patterns_found']} patterns ({res['novel']} novel)")
+            except Exception as e:
+                print(f"  [discovery error] {e}")   # never break the run
 
         # Cycle timing
         cycle_time = time.time() - cycle_start
