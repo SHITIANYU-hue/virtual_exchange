@@ -25,6 +25,37 @@ The discovery loop is an **open-set discoverer**:
 
 The discovery agent expands what the recognizer knows; the recognizer applies it in real time. This mirrors the two-timescale structure of the Regulator Agent Loop.
 
+### Recognizer tuning is NOT discovery (a common confusion)
+
+A natural question: "if the discovery agent finds behaviors on its own, why do we still need to fix rules and tune thresholds in the recognizer?" Because these are two different layers doing two different jobs, and one does not replace the other.
+
+- **Fixing/tuning the recognizer** (e.g. the `v3_swap` action-naming bug, the block threshold, the score weights) is about **real-time enforcement** — the per-action guard that must *block a manipulative trade the moment it happens*. The T-audit experiment arm runs the recognizer, not the discovery agent.
+- **The discovery agent** is a *researcher/detective*: every K cycles it reads history and produces a **catalog** of behaviors (including novel ones). By design it is observe-only — it does **not** gate execution.
+
+Discovering that a behavior exists ≠ blocking it in real time. If the recognizer is blind to AMM swaps (the `v3_swap` bug), it cannot enforce on them **regardless of** whether the discovery agent later notices the dump pattern in the logs — the trade already happened. Analogy: a broken camera at one door lets a thief walk through; a detective later writing up "a new theft method" does not un-rob the victim. You must (a) fix the camera, and (b) hand the detective's new pattern to the guard.
+
+The two layers are **complementary and connected**: the discovery agent grows the library, then feeds new patterns down to the recognizer (category injection / rule synthesis, §6), which enforces them fast. So the recognizer must actually work — hence the fixes below — and discovery makes it progressively smarter.
+
+**"Why not just let an agent decide everything?"** The LLM judge in the recognizer already *is* agent-like — it freely reads the action + intent and judges, and (importantly) it does **not** have the `v3_swap` blind spot, because it reads the raw action + stated intent rather than a buy/sell lookup table. The reasons the original design leaned on cheap hardcoded rules instead are (a) cost — an LLM call per action is expensive, and (b) speed — LLM calls are slow (the 50-cycle run is already LLM-latency-bound). These are real tradeoffs, resolved by an explicit decision below. Note that even a per-action LLM judge cannot alone see *emergent cross-cycle* behavior — that is the discovery agent's distinct job. So the roles remain: fast per-action judgment (rules and/or LLM) vs. cross-time discovery.
+
+### Two philosophies for the recognizer — decision: agent-driven
+
+The `blocked = 0` observation (50-cycle T-audit run: highest composite ThreatSense 0.68 < the 0.8 block threshold; top event `rule=0.70, stat=0.30, llm=0.95` → `0.3·0.70 + 0.3·0.30 + 0.4·0.95 = 0.68`) is not just a tuning knob — it exposes a real architectural fork. The LLM judge already scored that dump 0.95 "manipulative"; what suppressed the block was the *architecture* making brittle hardcoded rules load-bearing (the LLM is gated behind rules/stats and diluted to 0.4 weight).
+
+**Philosophy A — rule-driven (cheap, fast, brittle).** Hardcoded rules are the primary detector; the LLM is a gated add-on. Blocking depends on rules firing, so their bugs matter — e.g. the `v3_swap` naming bug (`sell_actions` lists a non-existent `v3_swap_sell`; the real action is `v3_swap` + `zero_for_one`) must be fixed or R002 (pump&dump, severity 0.9) never fires on AMM dumps, the main manipulation channel. *Pros:* cheap (LLM rarely called), fast, deterministic. *Cons:* brittle — every new action type or tactic needs a new hand-written rule, and blind spots silently pass manipulation until patched.
+
+**Philosophy B — agent-driven (expensive, slow, robust).** The LLM judge is the primary detector; rules/stats become cheap *hints* fed into its context, not gatekeepers or co-deciders. It reads every action + intent (+ any rule/stat hits) and its verdict+confidence drives block/flag. *Pros:* catches manipulation by understanding intent, including novel tactics in no rule; the `v3_swap` bug becomes low-priority (the judge never used the lookup table). *Cons:* an LLM call per action → expensive and slow (the 50-cycle run is already LLM-latency-bound); non-deterministic (relies on the tolerant parsing and tolerating occasional noise).
+
+**Decision (2026-07-18): go agent-driven (Philosophy B), accepting the cost and latency.** Rationale: the project's thesis is *emergent* behavior — a detector that only sees hand-enumerated patterns is the wrong tool for catching tactics the agents *invent*. An intent-reading LLM judge (and, above it, the cross-time discovery agent) is the natural fit and matches the "agent discovers behaviors itself" intuition. Cost and slowness are explicitly accepted.
+
+Concrete recognizer changes this implies:
+- **Ungate the LLM judge** — drop the `combined_concern > 0.1` precondition so the judge runs on every (non-trivial) action, not only when a brittle rule already fired.
+- **Make the LLM verdict primary** — either raise `llm_weight` to dominate (e.g. 0.15 / 0.15 / 0.70), or (cleaner) let the LLM verdict map directly to the outcome (manipulative → block, suspicious → flag), with rule/stat scores passed into the prompt as supporting evidence only.
+- **Demote rules/stats to hints** — they still run (cheap) and enrich the LLM's context, but no longer gate, veto, or dilute. The `v3_swap` naming bug drops to low-priority (nice-to-fix for cleaner hints, not required for blocking).
+- **Budget/latency** — accept per-action LLM cost; keep the query cache (repeat patterns skip the call) and optionally use a cheaper model for the per-action judge while the discovery pass uses a stronger one.
+
+This makes the recognizer itself agent-driven, composing with the discovery agent above it into a **fully agent-driven auditing stack**: the LLM judges each action in real time by intent; the discovery agent mines cross-cycle emergent patterns; hand-written rules recede to optional cheap hints. (Future extension: the per-action judge could even be handed the discovery agent's growing pattern library as additional context — §6 category injection — so real-time judgment sharpens as discovery accumulates.)
+
 ## 2. Motivation & Research Framing
 
 The whole project studies **emergent behavior** in adversarial multi-agent markets. There is a clean symmetry once discovery is added:
