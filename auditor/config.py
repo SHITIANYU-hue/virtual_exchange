@@ -26,8 +26,13 @@ class AuditorConfig:
     block_threshold: float = 0.8
     flag_threshold: float = 0.4
     mode: str = 'block_and_flag'  # Updated to block_and_flag per user instruction
+    # Agent-driven detection (Philosophy B, decided 2026-07-18): the LLM judge is
+    # the primary detector. It runs on every action (ungated) and its verdict maps
+    # directly to block/flag; rules/stats become hints in its prompt, not gates.
+    agent_driven: bool = True
+    block_min_confidence: float = 0.7  # min LLM confidence for a 'manipulative' -> BLOCKED
     llm_model: str = field(default_factory=lambda: os.environ.get('AUDITOR_LLM_MODEL', 'claude-haiku-4-5-20251001'))  # override via AUDITOR_LLM_MODEL
-    llm_timeout: float = 10.0
+    llm_timeout: float = 60.0  # was 10s; too short once prompts grow / on Sonnet -> timeouts
     cache_enabled: bool = True
     cache_max_size: int = 1000
     rule_weight: float = 0.3

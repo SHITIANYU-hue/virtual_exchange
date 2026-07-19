@@ -663,32 +663,39 @@ def execute_trades(agent_name: str, api_key: str, action: dict,
     if trades:
         print(f"  Executing {len(trades)} trades for {agent_name}...")
 
-    for trade in trades:
-        act = trade.get("action", "unknown")
-
-        # --- Agent Auditor Interception ---
+    # --- Agent Auditor: batch-audit ALL of this agent's trades in ONE LLM call ---
+    verdicts_by_idx = {}
+    if trades:
         try:
-            verdict = asyncio.run(trade_gate.audit_action(
+            verdicts = asyncio.run(trade_gate.audit_actions_batch(
                 agent_id=api_key,
                 agent_name=agent_name,
-                action=trade,
+                actions=trades,
                 cycle=cycle,
                 agent_info=agent_info,
                 market_state=market_state,
-                memory=memory
+                memory=memory,
             ))
-            # Persist every verdict (allowed/flagged/blocked) for the dashboard.
-            _persist_audit_verdict(headers, agent_name, cycle, experiment_id, verdict, agent_info)
+            for idx, v in enumerate(verdicts):
+                verdicts_by_idx[idx] = v
+                # Persist every verdict (allowed/flagged/blocked) for the dashboard.
+                _persist_audit_verdict(headers, agent_name, cycle, experiment_id, v, agent_info)
+        except Exception as e:
+            print(f"    [audit error] {e}")
+    # --- End Interception ---
+
+    for idx, trade in enumerate(trades):
+        act = trade.get("action", "unknown")
+
+        verdict = verdicts_by_idx.get(idx)
+        if verdict is not None:
             if verdict.is_blocked:
                 print(f"    [blocked] {act}: {verdict.threat_category.value} (Score: {verdict.threat_score:.2f})")
                 results["trades"].append({"action": act, "status": "blocked", "reason": verdict.threat_category.value})
                 continue
             if verdict.is_flagged:
                 print(f"    [flagged] {act}: {verdict.threat_category.value} (Score: {verdict.threat_score:.2f})")
-        except Exception as e:
-            print(f"    [audit error] {e}")
-        # --- End Interception ---
-        
+
         try:
             resp = None
             if act == "buy_spot":
