@@ -20,7 +20,7 @@ import os
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -297,7 +297,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     """Run a full multi-cycle experiment."""
 
     # Setup output directory: {timestamp}[_{label}] so runs are self-describing.
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     if output_dir:
         exp_dir = Path(output_dir)
     else:
@@ -388,7 +388,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     for cycle in range(start_cycle, total_cycles + 1):
         cycle_start = time.time()
         print(f"\n{'─'*50}")
-        print(f"CYCLE {cycle}/{total_cycles} — {datetime.now().strftime('%H:%M:%S')}")
+        print(f"CYCLE {cycle}/{total_cycles} — {datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC")
         print(f"{'─'*50}")
 
         cycle_portfolios = {}
@@ -491,7 +491,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
         # Save cycle portfolio values
         with open(csv_path, "a", newline="") as f:
             writer = csv.writer(f)
-            row = [cycle, datetime.now().isoformat()]
+            row = [cycle, datetime.now(timezone.utc).isoformat()]
             for name in agent_names:
                 row.append(round(cycle_portfolios.get(name, 0), 2))
             writer.writerow(row)
