@@ -22,6 +22,19 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/agent_metaverse
+      # Historical replay mode (docs/plans/2026-07-22-hourly-bull-bear-replay-design.md).
+      # Unset/live by default; set PRICE_MODE=replay REPLAY_WORLD=A|B before
+      # `docker compose up` to switch. REPLAY_WORLD is a blind label — the
+      # actual scenario is resolved inside the container from the mounted
+      # mapping file below, so it never appears on the host command line's
+      # own environment beyond the meaningless "A"/"B".
+      PRICE_MODE: ${PRICE_MODE:-live}
+      REPLAY_WORLD: ${REPLAY_WORLD:-}
+    volumes:
+      # Read-only; not part of the image build context, so replay data and the
+      # private world mapping can change without a rebuild. Both are gitignored.
+      - ./experiments/.private_world_mapping.json:/app/private_world_mapping.json:ro
+      - ./experiments/scenarios/hourly_replay:/app/hourly_replay_data:ro
     depends_on:
       db:
         condition: service_healthy

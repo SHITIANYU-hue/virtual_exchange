@@ -13,6 +13,16 @@ class Settings(BaseSettings):
     # shape for the /api/v3/ticker/price endpoint this project uses.
     binance_base_url: str = "https://data-api.binance.vision"
     price_update_interval: int = 120  # seconds
+
+    # Historical replay mode (see docs/plans/2026-07-22-hourly-bull-bear-replay-design.md).
+    # "replay_world" is a meaningless label ("A"/"B") — the real scenario name is resolved
+    # from replay_mapping_path, which is mounted read-only and never logged, so the world
+    # identity never reaches an HTTP response or a docker-compose command line.
+    price_mode: str = "live"  # "live" | "replay"
+    replay_world: str = ""    # "A" | "B" when price_mode == "replay"
+    replay_mapping_path: str = "/app/private_world_mapping.json"
+    replay_data_dir: str = "/app/hourly_replay_data"
+
     initial_balance: float = 10000.0  # USDT for new users
     spot_fee_rate: float = 0.001  # 0.1%
     amm_fee_rate: float = 0.003  # 0.3%

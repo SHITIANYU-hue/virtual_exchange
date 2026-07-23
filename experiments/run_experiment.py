@@ -293,8 +293,18 @@ def _init_csv_files(exp_dir: Path, agent_names: list) -> None:
 
 def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                    reset: bool = True, hard_reset: bool = False, output_dir: str = None,
-                   start_cycle: int = 1, label: str = None):
+                   start_cycle: int = 1, label: str = None, world: str = None):
     """Run a full multi-cycle experiment."""
+
+    # Blind-replay guardrail (docs/plans/2026-07-22-hourly-bull-bear-replay-design.md,
+    # section 5): a --world run must never let the real scenario identity leak into
+    # anything the operator or a later log-reader can see, including the label they
+    # typed themselves. Catches "--label bull-run" etc. before it becomes exp_dir's name.
+    if world:
+        leak_pattern = re.compile(r"bull|bear|19\d{2}|20\d{2}", re.IGNORECASE)
+        if label and leak_pattern.search(label):
+            sys.exit(f"ERROR: --label '{label}' looks like it leaks the world identity "
+                      f"(matches bull/bear/a year) — use a blind label like 'World-{world}'.")
 
     # Setup output directory: {timestamp}[_{label}] so runs are self-describing.
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -316,6 +326,20 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
     # Load ecosystem
     ecosystem = load_ecosystem()
     ordered_agents = get_execution_order(ecosystem["agents"])
+
+    # Blind-replay startup check: confirm the backend is actually in replay mode
+    # for this world BEFORE any hard-reset runs, and before burning 72 cycles
+    # blind against a misconfigured (live-mode) backend. turn=0 is a no-op on an
+    # already-loaded replay source (0 <= its starting turn), so this doubles as
+    # a pure validation ping with no side effect on the replay clock.
+    if world:
+        print(f"Validating replay backend is active for World {world}...")
+        resp = httpx.post(f"{BASE_URL}/api/admin/replay/advance", json={"turn": 0}, timeout=10.0)
+        if resp.status_code == 409:
+            sys.exit(f"ERROR: --world {world} was given but the backend is not running in "
+                      f"replay price mode. Start it with PRICE_MODE=replay REPLAY_WORLD={world} first.")
+        resp.raise_for_status()
+        print("Replay backend confirmed active.")
 
     # Optionally hard-reset (wipe DB + re-register agents) or just reset memory.
     # hard_reset is a strict superset of reset: it always wipes memory too,
@@ -361,6 +385,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
         "model": model or LLM_MODEL,
         "provider": LLM_PROVIDER,
         "hard_reset": hard_reset,
+        "world": world,
         "agents": [{"name": a["name"], "role": a["role"],
                      "initial_balance": a.get("initial_balance", 10000)}
                     for a in ordered_agents],
@@ -515,10 +540,24 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                         "balances": state["balances"],
                         "positions": state["positions"],
                     }
+            # Record the price snapshot this turn's agents actually saw (same
+            # for all of them — nothing mutates current_prices mid-cycle).
+            # Matters most for replay runs: this is the per-turn price trail
+            # for later analysis (handoff completion-criteria #8).
+            all_status["_prices"] = httpx.get(f"{BASE_URL}/api/prices", timeout=10.0).json()
             with open(exp_dir / "status" / f"cycle_{cycle}.json", "w") as f:
                 json.dump(all_status, f, indent=2)
         except Exception as e:
             print(f"  [status snapshot error] {e}")
+
+        # Advance the historical replay clock by one hour, now that every agent
+        # has acted this turn (handoff order: analyze -> trade -> audit -> THEN
+        # advance). Fail fast rather than silently continuing on stale prices.
+        if world:
+            resp = httpx.post(f"{BASE_URL}/api/admin/replay/advance", json={"turn": cycle}, timeout=10.0)
+            if resp.status_code != 200:
+                sys.exit(f"ERROR: replay advance failed for turn {cycle}: "
+                          f"{resp.status_code} {resp.text}")
 
         # Phase 5: Discovery — open-set pattern mining over the last K cycles.
         if DISCOVERY_ENABLED and cycle % DISCOVERY_K == 0:
@@ -608,6 +647,11 @@ def main():
     parser.add_argument("--label", type=str,
                          help="Human-readable label appended to the output directory name, "
                               "e.g. --label auditor-haiku-5cyc -> experiment_logs/20260718_HHMMSS_auditor-haiku-5cyc")
+    parser.add_argument("--world", type=str, choices=["A", "B"],
+                         help="Historical replay world (blind label, see docs/plans/"
+                              "2026-07-22-hourly-bull-bear-replay-design.md). Requires the "
+                              "backend to be running with PRICE_MODE=replay REPLAY_WORLD=<this>. "
+                              "Each cycle advances the replay by one historical hour.")
 
     args = parser.parse_args()
     aborted_reason = run_experiment(
@@ -619,6 +663,7 @@ def main():
         output_dir=args.output_dir,
         start_cycle=args.start_cycle,
         label=args.label,
+        world=args.world,
     )
     if aborted_reason:
         sys.exit(1)
