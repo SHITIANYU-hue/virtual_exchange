@@ -25,7 +25,9 @@ class AuditorConfig:
     """
     block_threshold: float = 0.8
     flag_threshold: float = 0.4
-    mode: str = 'block_and_flag'  # Updated to block_and_flag per user instruction
+    # Enforcement mode, overridable via AUDITOR_MODE (e.g. 'log_only' for a C0 arm:
+    # the judge still records verdicts but never blocks, so the market evolves freely).
+    mode: str = field(default_factory=lambda: os.environ.get('AUDITOR_MODE', 'block_and_flag'))
     # Agent-driven detection (Philosophy B, decided 2026-07-18): the LLM judge is
     # the primary detector. It runs on every action (ungated) and its verdict maps
     # directly to block/flag; rules/stats become hints in its prompt, not gates.
@@ -41,4 +43,8 @@ class AuditorConfig:
     wash_trade_window: int = 10
     pump_dump_window: int = 20
     front_run_window: int = 3
-    enabled: bool = True
+    # Full kill switch, overridable via AUDITOR_ENABLED=0 for a no-auditor arm:
+    # unlike mode='log_only' (which still runs the LLM judge on every action, just
+    # never blocks), enabled=False short-circuits audit_action()/audit_batch() before
+    # any context collection or LLM call — a true off switch, and faster too.
+    enabled: bool = field(default_factory=lambda: os.environ.get('AUDITOR_ENABLED', '1') != '0')
