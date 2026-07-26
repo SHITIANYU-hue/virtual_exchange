@@ -252,9 +252,15 @@ def parse_llm_response(raw_text: str) -> dict:
 
     for candidate in (text, _strip_trailing_commas(text)):
         try:
-            return json.loads(candidate)
+            parsed = json.loads(candidate)
         except json.JSONDecodeError:
-            pass
+            continue
+        # json.loads happily parses a bare string/number/list as valid JSON —
+        # e.g. the model double-quoting its whole reply — which downstream
+        # code (action.get(...)) then crashes on with a bare "'str' object
+        # has no attribute 'get'". Only a dict is a usable action.
+        if isinstance(parsed, dict):
+            return parsed
 
     # Try to find any JSON object in the text
     brace_start = text.find("{")
@@ -263,9 +269,11 @@ def parse_llm_response(raw_text: str) -> dict:
         substring = text[brace_start:brace_end]
         for candidate in (substring, _strip_trailing_commas(substring)):
             try:
-                return json.loads(candidate)
+                parsed = json.loads(candidate)
             except json.JSONDecodeError:
-                pass
+                continue
+            if isinstance(parsed, dict):
+                return parsed
 
     return {"_parse_error": True, "error": "Failed to parse LLM response", "raw": raw_text[:500]}
 
