@@ -29,6 +29,11 @@ TOTAL_CANDLES = FORMAL_HOURS + 1  # + 1 pre-interval "previous hour" for Turn 1
 WORLDS = {
     "bull": datetime(2024, 11, 6, 0, 0, tzinfo=timezone.utc),
     "bear": datetime(2026, 6, 4, 0, 0, tzinfo=timezone.utc),
+    # Real consolidation window: BTC/ETH/SOL chopped with meaningful intra-window
+    # range (4.9%/5.7%/9.6%) but small net moves (+0.2%/-2.1%/-6.5%) -- a genuine
+    # sideways regime, unlike the live-price "regular market" runs which turned
+    # out to be near-zero-volatility (see experiments/experiment_analysis).
+    "sideways": datetime(2023, 9, 10, 0, 0, tzinfo=timezone.utc),
 }
 
 OUT_DIR = Path(__file__).parent / "hourly_replay"
