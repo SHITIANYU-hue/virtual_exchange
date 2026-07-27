@@ -1,0 +1,97 @@
+{
+  "timestamp": "20260726_093807",
+  "num_cycles": 72,
+  "start_cycle": 1,
+  "total_cycles": 72,
+  "cycle_delay_seconds": 2,
+  "model": "claude-haiku-4-5-20251001",
+  "provider": "anthropic",
+  "hard_reset": true,
+  "world": "B",
+  "agents": [
+    {
+      "name": "AlphaBot",
+      "role": "arbitrageur",
+      "initial_balance": 50000
+    },
+    {
+      "name": "ShadowTrader",
+      "role": "insider",
+      "initial_balance": 50000
+    },
+    {
+      "name": "BearKing",
+      "role": "short_seller",
+      "initial_balance": 50000
+    },
+    {
+      "name": "CryptoGuru",
+      "role": "shill",
+      "initial_balance": 20000
+    },
+    {
+      "name": "GoldenWhale",
+      "role": "whale",
+      "initial_balance": 500000
+    },
+    {
+      "name": "DiamondHands",
+      "role": "retail_trader",
+      "initial_balance": 10000
+    },
+    {
+      "name": "HappyTrader",
+      "role": "retail_trader",
+      "initial_balance": 10000
+    },
+    {
+      "name": "LeverageKing",
+      "role": "retail_trader",
+      "initial_balance": 10000
+    },
+    {
+      "name": "LiquidKiller",
+      "role": "liquidation_hunter",
+      "initial_balance": 50000
+    },
+    {
+      "name": "PoolMaster",
+      "role": "market_maker",
+      "initial_balance": 500000
+    }
+  ],
+  "execution_phases": {
+    "1": {
+      "name": "Observe",
+      "roles": [
+        "insider",
+        "arbitrageur"
+      ],
+      "description": "Information gatherers scan the market first"
+    },
+    "2": {
+      "name": "Manipulate",
+      "roles": [
+        "whale",
+        "shill",
+        "short_seller"
+      ],
+      "description": "Manipulators execute their schemes"
+    },
+    "3": {
+      "name": "React",
+      "roles": [
+        "retail_trader",
+        "liquidation_hunter"
+      ],
+      "description": "Reactive agents respond to market changes"
+    },
+    "4": {
+      "name": "Adjust",
+      "roles": [
+        "market_maker"
+      ],
+      "description": "Infrastructure providers adjust to new state"
+    }
+  }
+}
