@@ -12,7 +12,7 @@
 | World A | 2026-07-23 19:23 | 2026-07-24 07:31 | ~12h08m |
 | World B | 2026-07-24 07:35 | 2026-07-24 15:46 | ~8h11m |
 
-Raw data: [`experiments/experiment_logs/20260723_191838_World-A-fulltest72/`](../../experiment_logs/20260723_191838_World-A-fulltest72/), [`experiments/experiment_logs/20260724_073057_World-B-fulltest72/`](../../experiment_logs/20260724_073057_World-B-fulltest72/)
+Raw data: see [`experiments/experiment_logs/README.md`](../../experiment_logs/README.md) for the full dataset link (run directories `20260723_191838_World-A-fulltest72` and `20260724_073057_World-B-fulltest72`).
 
 ## Setup
 
