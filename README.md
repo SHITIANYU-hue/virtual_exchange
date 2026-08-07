@@ -12,7 +12,7 @@ multi-agent LLM systems: manipulation dynamics, coalition formation, and
 whether an LLM-judge trading guardrail changes agent behavior under
 different (real, historically-replayed) market regimes. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system design and
-[`experiments/experiment_analysis/`](experiments/experiment_analysis/) for
+[`analysis/`](analysis/) for
 results.
 
 ```
@@ -202,10 +202,15 @@ PRICE_MODE=replay REPLAY_WORLD=A docker compose up -d --force-recreate backend
 python3 experiments/run_experiment.py --world A --cycles 72 --hard-reset
 ```
 
+[`experiments/configs/`](experiments/configs/) has one preset shell script per
+paper arm (World A/B/C × auditor on/off, plus the live-price baseline) with
+the exact CLI flags and env vars used to produce it.
+
 Results and interactive visualizations from completed experiment batches are
-in [`experiments/experiment_analysis/`](experiments/experiment_analysis/).
-The full raw per-cycle dataset is published separately — see
-[`experiments/experiment_logs/README.md`](experiments/experiment_logs/README.md).
+in [`analysis/`](analysis/). [`experiments/sample_data/`](experiments/sample_data/)
+keeps one full run's output in the repo as a concrete example; the complete
+raw dataset (all runs, all regimes) is published separately — see that
+directory's README for the link.
 
 ## Project Structure
 
@@ -236,9 +241,10 @@ The full raw per-cycle dataset is published separately — see
 ├── discovery/                    # open-set manipulation pattern mining
 ├── experiments/
 │   ├── run_experiment.py         # multi-cycle experiment runner
+│   ├── configs/                  # preset shell scripts, one per paper experiment arm
 │   ├── scenarios/                # historical replay price data + downloader
-│   ├── experiment_logs/          # raw per-run output (see its README — published externally)
-│   └── experiment_analysis/      # curated results + interactive visualizations
+│   └── sample_data/              # one full example run (raw dataset published externally)
+├── analysis/                     # curated results + interactive visualizations
 ├── skill/                        # OpenClaw Skill
 ├── docker-compose.yml
 └── docs/

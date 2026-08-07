@@ -304,7 +304,7 @@ def run_experiment(num_cycles: int, cycle_delay: int, model: str = None,
                    start_cycle: int = 1, label: str = None, world: str = None):
     """Run a full multi-cycle experiment."""
 
-    # Blind-replay guardrail (docs/plans/2026-07-22-hourly-bull-bear-replay-design.md,
+    # Blind-replay guardrail (docs/ARCHITECTURE.md (section 12),
     # section 5): a --world run must never let the real scenario identity leak into
     # anything the operator or a later log-reader can see, including the label they
     # typed themselves. Catches "--label bull-run" etc. before it becomes exp_dir's name.
@@ -656,8 +656,8 @@ def main():
                          help="Human-readable label appended to the output directory name, "
                               "e.g. --label auditor-haiku-5cyc -> experiment_logs/20260718_HHMMSS_auditor-haiku-5cyc")
     parser.add_argument("--world", type=str, choices=["A", "B", "C"],
-                         help="Historical replay world (blind label, see docs/plans/"
-                              "2026-07-22-hourly-bull-bear-replay-design.md). Requires the "
+                         help="Historical replay world (blind label, see "
+                              "docs/ARCHITECTURE.md section 12). Requires the "
                               "backend to be running with PRICE_MODE=replay REPLAY_WORLD=<this>. "
                               "Each cycle advances the replay by one historical hour.")
 

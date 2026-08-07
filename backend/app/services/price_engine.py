@@ -69,8 +69,8 @@ class ReplayPriceSource:
     start price, advancing one historical hour per explicit advance() call.
 
     Never exposes which world ("bull"/"bear") or which real dates are behind
-    the "A"/"B" label it was constructed with — see docs/plans/
-    2026-07-22-hourly-bull-bear-replay-design.md, section 5 (leak checklist).
+    the "A"/"B" label it was constructed with — see docs/ARCHITECTURE.md
+    section 12.
     """
 
     def __init__(self):

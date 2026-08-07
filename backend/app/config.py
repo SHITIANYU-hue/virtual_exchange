@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     binance_base_url: str = "https://data-api.binance.vision"
     price_update_interval: int = 120  # seconds
 
-    # Historical replay mode (see docs/plans/2026-07-22-hourly-bull-bear-replay-design.md).
+    # Historical replay mode (see docs/ARCHITECTURE.md (section 12)).
     # "replay_world" is a meaningless label ("A"/"B") — the real scenario name is resolved
     # from replay_mapping_path, which is mounted read-only and never logged, so the world
     # identity never reaches an HTTP response or a docker-compose command line.

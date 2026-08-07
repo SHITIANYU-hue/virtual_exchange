@@ -130,17 +130,19 @@ Agent_metaverse/
 │       └── retail_trader.md           # HappyTrader/DiamondHands/LeverageKing ($10K)
 ├── experiments/
 │   ├── run_experiment.py              # Automated multi-cycle experiment runner
-│   ├── analyze_results.py             # Post-experiment analysis
-│   ├── visualize_results.py           # Figure generation
-│   └── experiment_logs/               # Timestamped experiment data
+│   ├── configs/                       # Preset shell scripts, one per paper experiment arm
+│   ├── scenarios/                     # Historical replay price data + downloader
+│   └── sample_data/                   # One full example run (raw dataset published externally)
+├── analysis/                          # Curated results + interactive visualizations
+├── auditor/                           # LLM-in-the-loop trading guardrail (rule + stat + LLM judge)
+├── discovery/                         # Open-set manipulation pattern mining
 ├── sdk/                               # Python SDK client
 ├── skill/                             # OpenClaw skill integration
 ├── docker-compose.yml
-├── CLAUDE.md                          # Project context + API usage guide
+├── CLAUDE.md                          # Project context
 └── docs/
     ├── ARCHITECTURE.md                # ← This file
-    ├── paper_draft.md                 # Academic paper draft
-    └── plans/                         # Design docs
+    └── API.md                         # Every endpoint, with runnable examples
 ```
 
 ---

@@ -3,7 +3,7 @@ Unit test for ReplayPriceSource (backend/app/services/price_engine.py).
 
 Pure logic, no DB/HTTP needed — loads the real downloaded scenario data and
 the real private mapping, and checks the invariants the hourly bull/bear
-replay design depends on (see docs/plans/2026-07-22-hourly-bull-bear-replay-design.md).
+replay design depends on (see docs/ARCHITECTURE.md (section 12)).
 
 Run directly: python3 backend/tests/test_replay_price_source.py
 Requires: experiments/scenarios/hourly_replay/{bull,bear}/*.csv and

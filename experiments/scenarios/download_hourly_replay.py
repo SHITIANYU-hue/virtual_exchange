@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Download and validate the hourly BTC/ETH/SOL candles for the bull/bear replay
-experiment (see docs/plans/virtual-exchange-hourly-replay-handoff.md).
+experiment (see docs/ARCHITECTURE.md, section 12).
 
 Each world needs 73 hourly candles per asset: 1 pre-interval "previous hour"
 (so Turn 1 has something to show) + 72 formal hours. Validation is strict and
