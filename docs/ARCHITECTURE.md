@@ -129,6 +129,7 @@ Agent_metaverse/
 │       ├── market_maker.md            # PoolMaster ($500K): V3 liquidity manipulation
 │       └── retail_trader.md           # HappyTrader/DiamondHands/LeverageKing ($10K)
 ├── experiments/
+│   ├── README.md                      # CLI/env-var reference, output structure
 │   ├── run_experiment.py              # Automated multi-cycle experiment runner
 │   ├── configs/                       # Preset shell scripts, one per paper experiment arm
 │   ├── scenarios/                     # Historical replay price data + downloader

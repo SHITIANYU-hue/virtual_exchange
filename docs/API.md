@@ -272,66 +272,13 @@ python3 agents/run.py --reset-memory
 ## 16. Experiment Runner
 
 ```bash
-# Run 50-cycle experiment with 10-second delay between cycles
 python3 experiments/run_experiment.py --cycles 50 --delay 10
-
-# Use a specific model
-python3 experiments/run_experiment.py --cycles 100 --delay 5 --model claude-sonnet-4-20250514
-
-# Don't reset memories (continue from previous state)
-python3 experiments/run_experiment.py --cycles 20 --no-reset
-
-# Custom output directory
-python3 experiments/run_experiment.py --cycles 50 --output-dir experiments/exp2_data
 ```
 
-**Experiment output structure:**
-```
-experiments/experiment_logs/YYYYMMDD_HHMMSS/
-├── config.json                    # experiment parameters
-├── portfolio_performance.csv      # per-cycle portfolio values for all agents
-├── messages.csv                   # all messages with sender, recipient, phase
-├── prompts/                       # full ReAct prompts sent to LLM
-│   ├── GoldenWhale_cycle_1.txt
-│   └── ...
-├── actions/                       # raw + parsed LLM responses
-│   ├── GoldenWhale_cycle_1.json
-│   └── ...
-├── status/                        # per-cycle market snapshots
-│   ├── cycle_1.json
-│   └── ...
-└── errors/                        # any LLM or execution failures
-```
-
-**Environment variables:**
-- `LLM_PROVIDER`: "anthropic" (default) or "openai"
-- `LLM_MODEL`: model name (default: "claude-sonnet-4-20250514")
-- `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`: API key for LLM provider
-
-**Network-outage resilience (added after exp2_sonnet_100cycles_v7):**
-v7 lost 76/100 cycles in three multi-cycle waves because the sandbox's outbound
-network path intermittently dropped for extended stretches — every agent's LLM
-call failed instantly with a generic connection error, and the runner had no
-retry logic, so it burned through cycle after cycle at the fixed `--delay` with
-zero real data. Two mitigations are now built into `run_experiment.py`:
-- `call_llm()` retries connection errors and 429/5xx/overloaded responses with
-  exponential backoff (5s → 10s → 20s → 40s, 4 attempts) before giving up on
-  an agent's turn. Non-transient errors (auth, bad request) raise immediately.
-- If ≥50% of agents fail in a single cycle, the runner treats it as a likely
-  outage and backs off the *next* cycle's start by `delay × 2^consecutive_bad_cycles`
-  (capped at 300s) instead of retrying at the normal cadence; the backoff resets
-  once a cycle succeeds normally.
-- If ≥50% of agents fail in a single cycle AND every failure is a
-  positively-identified *permanent* LLM error (bad auth, insufficient
-  balance/quota, bad request — not a network blip), the runner aborts instead
-  of backing off forever (`exp2_fable_100cycles_v2`'s 402 "Insufficient
-  Balance" repeated unchanged for 74 straight cycles; no amount of waiting
-  fixes that). OpenAI complicates this: it returns status 429 for both
-  ordinary rate limiting (retry) and quota exhaustion (permanent), distinguishable
-  only via the error body's `code` field, not the status code. `insufficient_quota`
-  is classified as permanent, not retryable — `exp2_openai_5cycles_v3_part2` cycle 37
-  hit this (DiamondHands/HappyTrader both got `insufficient_quota`) and the runner
-  retried for hours instead of aborting immediately.
+Full CLI flag reference, environment variables, `configs/` presets, output
+directory structure, and the retry/backoff logic that protects a long run
+against transient LLM/network failures: see
+[`../experiments/README.md`](../experiments/README.md).
 
 ## Complete Pump & Dump Flow (Step by Step)
 

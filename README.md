@@ -92,7 +92,8 @@ python3 experiments/run_experiment.py --cycles 50 --delay 10
 Set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` with `LLM_PROVIDER=openai`) in
 `.env` before running an experiment. See [`docs/API.md`](docs/API.md) for
 every operation with runnable `curl` examples, including the historical
-replay mode.
+replay mode, and [`experiments/README.md`](experiments/README.md) for the
+full experiment-runner CLI/env-var reference.
 
 ### Local development (without Docker)
 
@@ -248,6 +249,7 @@ python3 analysis/test_analyze_run.py   # unit tests, run against that same sampl
 │   └── ...
 ├── discovery/                    # open-set manipulation pattern mining
 ├── experiments/
+│   ├── README.md                 # CLI/env-var reference, output structure
 │   ├── run_experiment.py         # multi-cycle experiment runner
 │   ├── configs/                  # preset shell scripts, one per paper experiment arm
 │   ├── scenarios/                # historical replay price data + downloader
