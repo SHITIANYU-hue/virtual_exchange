@@ -22,7 +22,7 @@ services:
       - "8000:8000"
     environment:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/agent_metaverse
-      # Historical replay mode (docs/plans/2026-07-22-hourly-bull-bear-replay-design.md).
+      # Historical replay mode (see docs/ARCHITECTURE.md, section 12).
       # Unset/live by default; set PRICE_MODE=replay REPLAY_WORLD=A|B before
       # `docker compose up` to switch. REPLAY_WORLD is a blind label — the
       # actual scenario is resolved inside the container from the mounted
