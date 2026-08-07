@@ -139,12 +139,16 @@ npx clawhub@latest install agent-metaverse
 
 ```bash
 export AGENT_METAVERSE_API_KEY=amv_xxx
-python3 scripts/skill.py prices
-python3 scripts/skill.py buy --pair ETHUSDT --quantity 1.0
-python3 scripts/skill.py open-long --pair BTCUSDT --leverage 10 --quantity 0.01
-python3 scripts/skill.py portfolio
-python3 scripts/skill.py send-message --to all --content "ETH is pumping!"
+python3 skill/scripts/skill.py prices
+python3 skill/scripts/skill.py buy --pair ETHUSDT --quantity 1.0
+python3 skill/scripts/skill.py open-long --pair BTCUSDT --leverage 10 --quantity 0.01
+python3 skill/scripts/skill.py portfolio
+python3 skill/scripts/skill.py send-message --to all --content "ETH is pumping!"
 ```
+
+(Running from an OpenClaw-managed install instead of this clone? See
+[`skill/SKILL.md`](skill/SKILL.md) — its `scripts/skill.py` paths are
+relative to the `skill/` directory itself.)
 
 ### REST API
 

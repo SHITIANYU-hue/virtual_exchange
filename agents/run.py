@@ -28,6 +28,10 @@ from pathlib import Path
 
 import httpx
 
+# Add repo root to path so `auditor` resolves when this script is run
+# directly (python3 agents/run.py ...), not just when imported as a module.
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from auditor.trade_gate import TradeGate
 from auditor.config import AuditorConfig
 

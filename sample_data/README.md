@@ -8,8 +8,17 @@ One complete run (`World A`, auditor `block_and_flag`, 72 cycles,
 
 This is one run out of the 20+ backing the results in
 [`../analysis/`](../analysis/). The full dataset (all runs, all
-market regimes and auditor configurations) is published separately — see
-[`../docs/EXPERIMENTS.md`](../docs/EXPERIMENTS.md).
+market regimes and auditor configurations, including the full
+`prompts/`/`actions/`/`errors/` this trimmed copy omits) is published
+separately:
+
+- **Dataset**: TODO — link to the Zenodo / Hugging Face Datasets release
+- **DOI**: TODO
+
+Running [`../run_experiment.py`](../run_experiment.py) yourself will
+regenerate this directory structure locally — see
+[`../docs/EXPERIMENTS.md`](../docs/EXPERIMENTS.md) for the full CLI
+reference.
 
 Recompute the headline numbers directly from this directory:
 
