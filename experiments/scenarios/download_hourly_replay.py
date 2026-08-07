@@ -32,7 +32,7 @@ WORLDS = {
     # Real consolidation window: BTC/ETH/SOL chopped with meaningful intra-window
     # range (4.9%/5.7%/9.6%) but small net moves (+0.2%/-2.1%/-6.5%) -- a genuine
     # sideways regime, unlike the live-price "regular market" runs which turned
-    # out to be near-zero-volatility (see experiments/experiment_analysis).
+    # out to be near-zero-volatility (see analysis/).
     "sideways": datetime(2023, 9, 10, 0, 0, tzinfo=timezone.utc),
 }
 
