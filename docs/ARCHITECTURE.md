@@ -133,7 +133,9 @@ Agent_metaverse/
 │   ├── configs/                       # Preset shell scripts, one per paper experiment arm
 │   ├── scenarios/                     # Historical replay price data + downloader
 │   └── sample_data/                   # One full example run (raw dataset published externally)
-├── analysis/                          # Curated results + interactive visualizations
+├── analysis/
+│   ├── analyze_run.py                 # Recompute headline stats from a run's raw output
+│   └── sample_data/                   # Curated results + interactive visualizations
 ├── auditor/                           # LLM-in-the-loop trading guardrail (rule + stat + LLM judge)
 ├── discovery/                         # Open-set manipulation pattern mining
 ├── sdk/                               # Python SDK client

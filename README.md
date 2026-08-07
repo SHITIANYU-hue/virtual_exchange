@@ -207,10 +207,17 @@ paper arm (World A/B/C × auditor on/off, plus the live-price baseline) with
 the exact CLI flags and env vars used to produce it.
 
 Results and interactive visualizations from completed experiment batches are
-in [`analysis/`](analysis/). [`experiments/sample_data/`](experiments/sample_data/)
-keeps one full run's output in the repo as a concrete example; the complete
-raw dataset (all runs, all regimes) is published separately — see that
-directory's README for the link.
+in [`analysis/`](analysis/), alongside [`analysis/analyze_run.py`](analysis/analyze_run.py)
+(stdlib-only — recomputes the headline PnL/dispersion/audit numbers from a
+run's raw output) and [`analysis/sample_data/`](analysis/sample_data/) (the
+runs those numbers come from). [`experiments/sample_data/`](experiments/sample_data/)
+keeps one full run's raw output in the repo as a concrete example; the
+complete raw dataset (all runs, all regimes) is published separately — see
+that directory's README for the link.
+
+```bash
+python3 analysis/analyze_run.py experiments/sample_data
+```
 
 ## Project Structure
 
@@ -244,7 +251,9 @@ directory's README for the link.
 │   ├── configs/                  # preset shell scripts, one per paper experiment arm
 │   ├── scenarios/                # historical replay price data + downloader
 │   └── sample_data/              # one full example run (raw dataset published externally)
-├── analysis/                     # curated results + interactive visualizations
+├── analysis/
+│   ├── analyze_run.py            # recompute headline stats from a run's raw output
+│   └── sample_data/              # curated results + interactive visualizations
 ├── skill/                        # OpenClaw Skill
 ├── docker-compose.yml
 └── docs/
