@@ -6,5 +6,5 @@
 set -e
 export AUDITOR_MODE=log_only
 docker compose up -d backend
-python3 experiments/run_experiment.py --cycles 50 --delay 10 \
+python3 run_experiment.py --cycles 50 --delay 10 \
   --hard-reset --model claude-haiku-4-5-20251001 --label regular-market-norestriction

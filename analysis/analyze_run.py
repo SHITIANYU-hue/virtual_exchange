@@ -8,7 +8,7 @@ Usage:
     python3 analysis/analyze_run.py <run_dir> [<run_dir> ...] [--dm-pair AgentA AgentB]
 
 Example:
-    python3 analysis/analyze_run.py experiments/sample_data
+    python3 analysis/analyze_run.py sample_data
 
 Tests: python3 analysis/test_analyze_run.py
 """

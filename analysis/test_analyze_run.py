@@ -1,9 +1,9 @@
 """
 Unit tests for analyze_run.py, run against the real sample run checked into
-experiments/sample_data/ (no fixtures -- that directory *is* the fixture).
+sample_data/ (no fixtures -- that directory *is* the fixture).
 
 Run directly: python3 analysis/test_analyze_run.py
-Requires: experiments/sample_data/ (checked into the repo).
+Requires: sample_data/ (checked into the repo).
 """
 import csv
 import sys
@@ -11,7 +11,7 @@ from pathlib import Path
 
 ANALYSIS_DIR = Path(__file__).parent
 REPO_ROOT = ANALYSIS_DIR.parent
-SAMPLE_RUN = REPO_ROOT / "experiments" / "sample_data"
+SAMPLE_RUN = REPO_ROOT / "sample_data"
 sys.path.insert(0, str(ANALYSIS_DIR))
 
 from analyze_run import (  # noqa: E402

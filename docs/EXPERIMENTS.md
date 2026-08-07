@@ -2,15 +2,16 @@
 
 `run_experiment.py` drives the whole agent ecosystem through a fixed number
 of ReAct cycles against a running backend and writes every prompt, action,
-market snapshot, and audit verdict to disk. This is the guide to running it;
-for the backend's HTTP API itself see [`../docs/API.md`](../docs/API.md).
+market snapshot, and audit verdict to disk. This is the guide to running
+it; for the backend's HTTP API itself see [`API.md`](API.md). All commands
+below assume your working directory is the repo root.
 
 ## Quick start
 
 ```bash
 docker compose up -d
-python3 ../agents/run.py --setup                 # register all 10 agents
-python3 run_experiment.py --cycles 50 --delay 10  # live prices, 50 cycles
+python3 agents/run.py --setup                     # register all 10 agents
+python3 run_experiment.py --cycles 50 --delay 10   # live prices, 50 cycles
 ```
 
 Set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` with `LLM_PROVIDER=openai`) in
@@ -28,7 +29,7 @@ Set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` with `LLM_PROVIDER=openai`) in
 | `--output-dir PATH` | Custom output directory (default: `experiment_logs/YYYYMMDD_HHMMSS/`) |
 | `--start-cycle N` | Starting cycle number, for continuing an interrupted run |
 | `--label TEXT` | Human-readable suffix on the output directory, e.g. `--label auditor-haiku-5cyc` → `experiment_logs/20260718_HHMMSS_auditor-haiku-5cyc` |
-| `--world {A,B,C}` | Historical replay world (blind label). Requires the backend running with `PRICE_MODE=replay REPLAY_WORLD=<this>`; each cycle advances the replay by one historical hour. See [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md), section 12 |
+| `--world {A,B,C}` | Historical replay world (blind label). Requires the backend running with `PRICE_MODE=replay REPLAY_WORLD=<this>`; each cycle advances the replay by one historical hour. See [`ARCHITECTURE.md`](ARCHITECTURE.md), section 12 |
 
 ## Environment variables
 
@@ -79,11 +80,12 @@ experiment_logs/YYYYMMDD_HHMMSS[_label]/
 ```
 
 `experiment_logs/` itself is gitignored — nothing under it is committed.
-[`sample_data/`](sample_data/) is a trimmed, checked-in copy of one real run
-(everything above except `prompts/`/`actions/`, which are large raw LLM I/O)
-kept as a concrete example and as the fixture [`../analysis/test_analyze_run.py`](../analysis/test_analyze_run.py)
-runs against. The complete raw dataset across every run is published
-separately — see [`sample_data/README.md`](sample_data/README.md).
+[`../sample_data/`](../sample_data/) is a trimmed, checked-in copy of one
+real run (everything above except `prompts/`/`actions/`, which are large
+raw LLM I/O) kept as a concrete example and as the fixture
+[`../analysis/test_analyze_run.py`](../analysis/test_analyze_run.py) runs
+against. The complete raw dataset across every run is published
+separately — see [`../sample_data/README.md`](../sample_data/README.md).
 
 ## Network-outage resilience
 
@@ -104,7 +106,7 @@ is classified as permanent.
 ## Analyzing results
 
 ```bash
-python3 ../analysis/analyze_run.py experiment_logs/20260101_120000_my-run
+python3 analysis/analyze_run.py experiment_logs/20260101_120000_my-run
 ```
 
 See [`../analysis/`](../analysis/) for the analysis script, its unit tests,

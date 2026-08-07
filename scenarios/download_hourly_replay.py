@@ -10,7 +10,7 @@ never falls back to live or seed prices, per the handoff's data-integrity
 requirement.
 
 Usage:
-    python3 experiments/scenarios/download_hourly_replay.py
+    python3 scenarios/download_hourly_replay.py
 """
 import csv
 import sys

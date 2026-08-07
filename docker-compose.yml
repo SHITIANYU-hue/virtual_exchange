@@ -33,8 +33,8 @@ services:
     volumes:
       # Read-only; not part of the image build context, so replay data and the
       # private world mapping can change without a rebuild. Both are gitignored.
-      - ./experiments/.private_world_mapping.json:/app/private_world_mapping.json:ro
-      - ./experiments/scenarios/hourly_replay:/app/hourly_replay_data:ro
+      - ./.private_world_mapping.json:/app/private_world_mapping.json:ro
+      - ./scenarios/hourly_replay:/app/hourly_replay_data:ro
     depends_on:
       db:
         condition: service_healthy

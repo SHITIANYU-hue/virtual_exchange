@@ -321,9 +321,8 @@ async def mint_below_price_usdt(
     If tick_lower/tick_upper are omitted, a safe range is computed automatically:
     tick_upper snapped to the current tick's own tick_spacing slot (guaranteed
     <= current tick) and tick_lower a fixed width below it. Callers across
-    several models (Haiku, GPT-4o, Fable — see experiments/findings_error_
-    adaptation_cross_model.md) have repeatedly picked a tick_upper exactly one
-    tick_spacing too high and never corrected it across retries even given a
+    several models (Haiku, GPT-4o, Fable) have repeatedly picked a tick_upper
+    exactly one tick_spacing too high and never corrected it across retries even given a
     clear error message, so letting them skip the arithmetic entirely removes
     the failure mode instead of just explaining it better.
     """

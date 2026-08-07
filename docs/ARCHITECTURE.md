@@ -128,15 +128,13 @@ Agent_metaverse/
 │       ├── arbitrageur.md             # AlphaBot ($50K): AMM arb, counter-trading
 │       ├── market_maker.md            # PoolMaster ($500K): V3 liquidity manipulation
 │       └── retail_trader.md           # HappyTrader/DiamondHands/LeverageKing ($10K)
-├── experiments/
-│   ├── README.md                      # CLI/env-var reference, output structure
-│   ├── run_experiment.py              # Automated multi-cycle experiment runner
-│   ├── configs/                       # Preset shell scripts, one per paper experiment arm
-│   ├── scenarios/                     # Historical replay price data + downloader
-│   └── sample_data/                   # One full example run (raw dataset published externally)
+├── run_experiment.py                  # Automated multi-cycle experiment runner
+├── configs/                           # Preset shell scripts, one per paper experiment arm
+├── scenarios/                         # Historical replay price data + downloader
+├── sample_data/                       # One full example run (raw dataset published externally)
 ├── analysis/
 │   ├── analyze_run.py                 # Recompute headline stats from a run's raw output
-│   ├── test_analyze_run.py            # Unit tests (run against experiments/sample_data/)
+│   ├── test_analyze_run.py            # Unit tests (run against sample_data/)
 │   └── sample_data/                   # Curated results + interactive visualizations
 ├── auditor/                           # LLM-in-the-loop trading guardrail (rule + stat + LLM judge)
 ├── discovery/                         # Open-set manipulation pattern mining
@@ -146,7 +144,8 @@ Agent_metaverse/
 ├── CLAUDE.md                          # Project context
 └── docs/
     ├── ARCHITECTURE.md                # ← This file
-    └── API.md                         # Every endpoint, with runnable examples
+    ├── API.md                         # Every endpoint, with runnable examples
+    └── EXPERIMENTS.md                 # Experiment runner CLI/env-var reference
 ```
 
 ---
@@ -629,7 +628,7 @@ Each prompt follows this structure:
 
 ## 7. Experiment Runner
 
-`experiments/run_experiment.py`
+`run_experiment.py`
 
 Automates multi-cycle experiments:
 
@@ -866,14 +865,14 @@ seconds (`backend/app/services/price_engine.py`). Replay mode instead serves a
 real historical hourly price path — used to study agent behavior under
 different market regimes with a real (not synthetic) price trajectory.
 
-- **Data**: `experiments/scenarios/hourly_replay/{bull,bear,sideways}/{BTCUSDT,ETHUSDT,SOLUSDT}.csv`
+- **Data**: `scenarios/hourly_replay/{bull,bear,sideways}/{BTCUSDT,ETHUSDT,SOLUSDT}.csv`
   — 73 hourly candles each (1 pre-interval "previous hour" + 72 formal hours),
-  downloaded and integrity-checked by `experiments/scenarios/download_hourly_replay.py`
+  downloaded and integrity-checked by `scenarios/download_hourly_replay.py`
   (exact contiguous hourly grid, no gaps, cross-asset alignment; never falls
   back to live/seed prices on any validation failure).
 - **Blind labeling**: scenarios are referred to only as "World A" / "World B" /
   "World C" everywhere agent-facing or in logs — the label-to-scenario mapping
-  lives in a local, gitignored `experiments/.private_world_mapping.json`, so
+  lives in a local, gitignored `.private_world_mapping.json`, so
   neither the agents nor (if the experimenter chooses not to open that file)
   the human analyst know which real regime is running until they deliberately
   reveal it post-analysis.
@@ -891,5 +890,5 @@ different market regimes with a real (not synthetic) price trajectory.
   price and never sees the future.
 - **Enabling replay mode**: set `PRICE_MODE=replay` and `REPLAY_WORLD={A,B,C}`
   as backend environment variables (see `docker-compose.yml`) before starting
-  the backend, then pass `--world {A,B,C}` to `experiments/run_experiment.py`.
+  the backend, then pass `--world {A,B,C}` to `run_experiment.py`.
   Live Binance polling is fully disabled while in replay mode.

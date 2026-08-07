@@ -6,8 +6,8 @@ the real private mapping, and checks the invariants the hourly bull/bear
 replay design depends on (see docs/ARCHITECTURE.md (section 12)).
 
 Run directly: python3 backend/tests/test_replay_price_source.py
-Requires: experiments/scenarios/hourly_replay/{bull,bear}/*.csv and
-experiments/.private_world_mapping.json to already exist (download_hourly_replay.py).
+Requires: scenarios/hourly_replay/{bull,bear}/*.csv and
+.private_world_mapping.json to already exist (download_hourly_replay.py).
 """
 import sys
 from decimal import Decimal
@@ -21,8 +21,8 @@ from app.config import settings  # noqa: E402
 from app.services.price_engine import ReplayPriceSource, SEED_PRICES, TRADING_PAIRS, TOTAL_CANDLES  # noqa: E402
 
 # Point settings at the real repo paths (not the /app/ paths used inside Docker).
-settings.replay_mapping_path = str(REPO_ROOT / "experiments" / ".private_world_mapping.json")
-settings.replay_data_dir = str(REPO_ROOT / "experiments" / "scenarios" / "hourly_replay")
+settings.replay_mapping_path = str(REPO_ROOT / ".private_world_mapping.json")
+settings.replay_data_dir = str(REPO_ROOT / "scenarios" / "hourly_replay")
 
 
 def test_world(world_label: str):

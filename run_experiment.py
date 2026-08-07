@@ -9,8 +9,8 @@ Automates multi-cycle experiments with:
   - Portfolio tracking and CSV export
 
 Usage:
-    python3 experiments/run_experiment.py --cycles 50 --delay 10
-    python3 experiments/run_experiment.py --cycles 100 --delay 5 --model claude-sonnet-4-20250514
+    python3 run_experiment.py --cycles 50 --delay 10
+    python3 run_experiment.py --cycles 100 --delay 5 --model claude-sonnet-4-20250514
 """
 
 import argparse
@@ -23,8 +23,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add repo root to path for imports (this script now lives at the repo root)
+sys.path.insert(0, str(Path(__file__).parent))
 
 from agents.run import (
     BASE_URL,

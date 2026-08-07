@@ -12,7 +12,7 @@
 | World A | 2026-07-23 19:23 | 2026-07-24 07:31 | ~12h08m |
 | World B | 2026-07-24 07:35 | 2026-07-24 15:46 | ~8h11m |
 
-Raw data: [`experiments/sample_data/`](../../../experiments/sample_data/) keeps one full example run in the repo; the complete dataset (all runs, all regimes) is published separately — see that directory's README for the link (run directories `20260723_191838_World-A-fulltest72` and `20260724_073057_World-B-fulltest72`).
+Raw data: [`sample_data/`](../../../sample_data/) keeps one full example run in the repo; the complete dataset (all runs, all regimes) is published separately — see that directory's README for the link (run directories `20260723_191838_World-A-fulltest72` and `20260724_073057_World-B-fulltest72`).
 
 ## Setup
 

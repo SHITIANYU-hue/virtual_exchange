@@ -86,13 +86,13 @@ docker compose up
 python3 agents/run.py --setup
 
 # Run a 50-cycle experiment (agent LLM calls, live prices)
-python3 experiments/run_experiment.py --cycles 50 --delay 10
+python3 run_experiment.py --cycles 50 --delay 10
 ```
 
 Set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` with `LLM_PROVIDER=openai`) in
 `.env` before running an experiment. See [`docs/API.md`](docs/API.md) for
 every operation with runnable `curl` examples, including the historical
-replay mode, and [`experiments/README.md`](experiments/README.md) for the
+replay mode, and [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for the
 full experiment-runner CLI/env-var reference.
 
 ### Local development (without Docker)
@@ -198,12 +198,12 @@ controlled comparisons of manipulation dynamics across market regimes and
 guardrail configurations.
 
 ```bash
-python3 experiments/scenarios/download_hourly_replay.py   # one-time: fetch + validate scenario data
+python3 scenarios/download_hourly_replay.py   # one-time: fetch + validate scenario data
 PRICE_MODE=replay REPLAY_WORLD=A docker compose up -d --force-recreate backend
-python3 experiments/run_experiment.py --world A --cycles 72 --hard-reset
+python3 run_experiment.py --world A --cycles 72 --hard-reset
 ```
 
-[`experiments/configs/`](experiments/configs/) has one preset shell script per
+[`configs/`](configs/) has one preset shell script per
 paper arm (World A/B/C × auditor on/off, plus the live-price baseline) with
 the exact CLI flags and env vars used to produce it.
 
@@ -211,13 +211,13 @@ Results and interactive visualizations from completed experiment batches are
 in [`analysis/`](analysis/), alongside [`analysis/analyze_run.py`](analysis/analyze_run.py)
 (stdlib-only — recomputes the headline PnL/dispersion/audit numbers from a
 run's raw output) and [`analysis/sample_data/`](analysis/sample_data/) (the
-runs those numbers come from). [`experiments/sample_data/`](experiments/sample_data/)
+runs those numbers come from). [`sample_data/`](sample_data/)
 keeps one full run's raw output in the repo as a concrete example; the
 complete raw dataset (all runs, all regimes) is published separately — see
 that directory's README for the link.
 
 ```bash
-python3 analysis/analyze_run.py experiments/sample_data
+python3 analysis/analyze_run.py sample_data
 python3 analysis/test_analyze_run.py   # unit tests, run against that same sample data
 ```
 
@@ -248,21 +248,20 @@ python3 analysis/test_analyze_run.py   # unit tests, run against that same sampl
 │   ├── trade_gate.py             # orchestrator: rule + stat + LLM scoring -> verdict
 │   └── ...
 ├── discovery/                    # open-set manipulation pattern mining
-├── experiments/
-│   ├── README.md                 # CLI/env-var reference, output structure
-│   ├── run_experiment.py         # multi-cycle experiment runner
-│   ├── configs/                  # preset shell scripts, one per paper experiment arm
-│   ├── scenarios/                # historical replay price data + downloader
-│   └── sample_data/              # one full example run (raw dataset published externally)
+├── run_experiment.py             # multi-cycle experiment runner
+├── configs/                      # preset shell scripts, one per paper experiment arm
+├── scenarios/                    # historical replay price data + downloader
+├── sample_data/                  # one full example run (raw dataset published externally)
 ├── analysis/
 │   ├── analyze_run.py            # recompute headline stats from a run's raw output
-│   ├── test_analyze_run.py       # unit tests (run against experiments/sample_data/)
+│   ├── test_analyze_run.py       # unit tests (run against sample_data/)
 │   └── sample_data/              # curated results + interactive visualizations
 ├── skill/                        # OpenClaw Skill
 ├── docker-compose.yml
 └── docs/
     ├── ARCHITECTURE.md           # full system design
-    └── API.md                    # every endpoint, with runnable examples
+    ├── API.md                    # every endpoint, with runnable examples
+    └── EXPERIMENTS.md            # experiment runner CLI/env-var reference
 ```
 
 ## Trading Mechanics

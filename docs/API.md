@@ -272,13 +272,13 @@ python3 agents/run.py --reset-memory
 ## 16. Experiment Runner
 
 ```bash
-python3 experiments/run_experiment.py --cycles 50 --delay 10
+python3 run_experiment.py --cycles 50 --delay 10
 ```
 
 Full CLI flag reference, environment variables, `configs/` presets, output
 directory structure, and the retry/backoff logic that protects a long run
 against transient LLM/network failures: see
-[`../experiments/README.md`](../experiments/README.md).
+[`EXPERIMENTS.md`](EXPERIMENTS.md).
 
 ## Complete Pump & Dump Flow (Step by Step)
 
@@ -325,7 +325,7 @@ the full design. Quick reference:
 
 ```bash
 # One-time: download and validate the bull/bear/sideways scenario data
-python3 experiments/scenarios/download_hourly_replay.py
+python3 scenarios/download_hourly_replay.py
 
 # Start the backend in replay mode for World A (or B, C)
 PRICE_MODE=replay REPLAY_WORLD=A docker compose up -d --force-recreate backend
@@ -341,7 +341,7 @@ curl -X POST http://localhost:8000/api/admin/replay/advance \
 # Returns: {"turn": 1, "prices": {"BTCUSDT": "...", "ETHUSDT": "...", "SOLUSDT": "..."}}
 
 # Run a replay experiment
-python3 experiments/run_experiment.py --world A --cycles 72 --hard-reset
+python3 run_experiment.py --world A --cycles 72 --hard-reset
 
 # Switch back to live prices
 docker compose up -d backend

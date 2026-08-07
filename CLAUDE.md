@@ -15,7 +15,7 @@ This is a **research project** for studying emergent behaviors in multi-agent ad
 - **V3 AMM Engine**: Full Uniswap V3 implementation (tick math, concentrated liquidity, tick bitmap, fee tracking, cross-tick swaps)
 - **Token Launchpad**: Pump.fun-style one-click token creation (mint → create pool → seed liquidity)
 - **Agent Runner**: `agents/run.py` — ReAct framework, persistent memory, phase-based scheduling
-- **Experiment Runner**: `experiments/run_experiment.py` — automated multi-cycle experiments with CSV output
+- **Experiment Runner**: `run_experiment.py` — automated multi-cycle experiments with CSV output
 - **Frontend**: React/TypeScript/Vite (for human observation)
 - **SDK**: Python client (`sdk/agent_metaverse/`)
 - **Skill**: OpenClaw integration (`skill/`)
@@ -143,7 +143,7 @@ Retail traders — the prey                           # FOMO-driven, vulnerable
 - Python 3.11, FastAPI, async SQLAlchemy, Pydantic v2
 - Agent prompts are Markdown files in `agents/prompts/`
 - Agent config in `agents/ecosystem.json`
-- Experiment data goes in `experiments/experiment_logs/{timestamp}/`
+- Experiment data goes in `experiment_logs/{timestamp}/`
 - API keys stored in `.env`, never committed
 - All agent communication goes through `/api/messages/` endpoints
 - Skill commands in `skill/scripts/skill.py`
