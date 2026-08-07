@@ -818,3 +818,72 @@ cd experiments && python3 run_experiment.py --cycles 50
 7. **All-in-memory tick bitmap**: Loaded from DB on each swap, modified in memory, written back. Trade-off: simple but O(n) on number of initialized ticks per pool. Acceptable for simulation scale.
 
 8. **Decimal arithmetic**: All financial math uses Python `Decimal` (not float) to avoid floating-point errors. Precision set to 78 digits to match Solidity uint256.
+
+## 11. Agent Auditor (`auditor/`)
+
+An LLM-in-the-loop guardrail sitting between agent decisions and trade
+execution — every trade action is scored before it reaches the exchange.
+
+- **`trade_gate.py`** — orchestrator. `audit_action()` / `audit_batch()` collect
+  context (agent's recent trades, messages, memory, current market state),
+  score it, and return an `AuditVerdict` (`ALLOWED` / `FLAGGED` / `BLOCKED`).
+- **Threat scoring** blends three signals (`threat_scorer.py`):
+  - `rule_auditor.py` — hand-written pattern rules (wash trading, pump & dump
+    windows, front-running windows)
+  - `stat_auditor.py` — statistical anomaly detection over recent trade history
+  - `llm_auditor.py` — an LLM judge (default `claude-haiku-4-5-20251001`,
+    override via `AUDITOR_LLM_MODEL`) that reads the same context and returns
+    an intent classification with confidence. In `agent_driven` mode (the
+    default), the LLM's verdict is authoritative; rules/stats become hints in
+    its prompt rather than independent gates.
+- **`audit_cache.py`** — caches verdicts for repeated similar action patterns
+  to cut LLM call volume.
+- **`discovery/`** — a separate open-set pattern-mining pass (`DiscoveryAgent`)
+  run periodically over recent audit events to surface manipulation patterns
+  the fixed rule set doesn't name yet (e.g. "resubmit-after-block", "cross-venue
+  price-impact stacking").
+
+**Enforcement modes** (`AuditorConfig`, `auditor/config.py`), all overridable
+via environment variables so the same code can run as different experimental
+arms without a code change:
+
+| Setting | Env var | Effect |
+|---|---|---|
+| `block_and_flag` (default) | `AUDITOR_MODE=block_and_flag` | High-threat actions are blocked outright; medium-threat are flagged (logged, allowed) |
+| `log_only` | `AUDITOR_MODE=log_only` | The LLM judge scores every action as normal, but nothing is ever blocked — useful as an unenforced control arm |
+| fully disabled | `AUDITOR_ENABLED=0` | Short-circuits before any context collection or LLM call — no judge latency at all, a true "no auditor" condition, distinct from `log_only` |
+
+## 12. Historical Replay Price Mode
+
+Normally the price engine polls live Binance prices every `price_update_interval`
+seconds (`backend/app/services/price_engine.py`). Replay mode instead serves a
+real historical hourly price path — used to study agent behavior under
+different market regimes with a real (not synthetic) price trajectory.
+
+- **Data**: `experiments/scenarios/hourly_replay/{bull,bear,sideways}/{BTCUSDT,ETHUSDT,SOLUSDT}.csv`
+  — 73 hourly candles each (1 pre-interval "previous hour" + 72 formal hours),
+  downloaded and integrity-checked by `experiments/scenarios/download_hourly_replay.py`
+  (exact contiguous hourly grid, no gaps, cross-asset alignment; never falls
+  back to live/seed prices on any validation failure).
+- **Blind labeling**: scenarios are referred to only as "World A" / "World B" /
+  "World C" everywhere agent-facing or in logs — the label-to-scenario mapping
+  lives in a local, gitignored `experiments/.private_world_mapping.json`, so
+  neither the agents nor (if the experimenter chooses not to open that file)
+  the human analyst know which real regime is running until they deliberately
+  reveal it post-analysis.
+- **Price normalization**: replayed prices are rebased so the first (pre-interval)
+  candle equals the project's standard seed price for that asset, then every
+  later candle scales by the real historical return from that anchor —
+  `replay_price = common_start_price × historical_close[t] / historical_close[0]`.
+  This preserves the real up/down path without exposing the real absolute
+  price level (which would otherwise reveal the historical date/era).
+- **Turn advancement**: `ReplayPriceSource` (`price_engine.py`) holds a turn
+  counter; `POST /api/admin/replay/advance {"turn": N}` moves it forward one
+  historical hour (idempotent — replaying the same turn number is a no-op, a
+  lower turn number is rejected). The experiment runner calls this once per
+  cycle, after all agents have acted, so agent `N` reads the *previous* hour's
+  price and never sees the future.
+- **Enabling replay mode**: set `PRICE_MODE=replay` and `REPLAY_WORLD={A,B,C}`
+  as backend environment variables (see `docker-compose.yml`) before starting
+  the backend, then pass `--world {A,B,C}` to `experiments/run_experiment.py`.
+  Live Binance polling is fully disabled while in replay mode.
