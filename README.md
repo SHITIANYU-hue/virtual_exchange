@@ -217,6 +217,7 @@ that directory's README for the link.
 
 ```bash
 python3 analysis/analyze_run.py experiments/sample_data
+python3 analysis/test_analyze_run.py   # unit tests, run against that same sample data
 ```
 
 ## Project Structure
@@ -253,6 +254,7 @@ python3 analysis/analyze_run.py experiments/sample_data
 │   └── sample_data/              # one full example run (raw dataset published externally)
 ├── analysis/
 │   ├── analyze_run.py            # recompute headline stats from a run's raw output
+│   ├── test_analyze_run.py       # unit tests (run against experiments/sample_data/)
 │   └── sample_data/              # curated results + interactive visualizations
 ├── skill/                        # OpenClaw Skill
 ├── docker-compose.yml

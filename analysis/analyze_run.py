@@ -9,11 +9,13 @@ Usage:
 
 Example:
     python3 analysis/analyze_run.py experiments/sample_data
+
+Tests: python3 analysis/test_analyze_run.py
 """
 import argparse
 import csv
 import json
-import statistics
+from collections import Counter
 from pathlib import Path
 
 
@@ -38,6 +40,34 @@ def final_returns(run_dir: Path, agents: list[dict]) -> list[tuple[str, str, flo
     return out
 
 
+def load_audit_report(run_dir: Path) -> dict | None:
+    """Returns the parsed audit_report.json, or None if the auditor was disabled for this run."""
+    path = run_dir / "audit_report.json"
+    if not path.exists():
+        return None
+    with open(path) as f:
+        return json.load(f)
+
+
+def load_dms(run_dir: Path) -> list[dict]:
+    """Returns messages.csv rows excluding broadcasts (recipient == 'all')."""
+    with open(run_dir / "messages.csv") as f:
+        rows = list(csv.DictReader(f))
+    return [r for r in rows if r["recipient"] != "all"]
+
+
+def dm_count(run_dir: Path, agent_a: str, agent_b: str) -> int:
+    """Count of DMs between two agents, in either direction."""
+    pair = {agent_a, agent_b}
+    return sum(1 for r in load_dms(run_dir) if {r["sender"], r["recipient"]} == pair)
+
+
+def top_dm_pairs(run_dir: Path, n: int = 8) -> list[tuple[frozenset, int]]:
+    """The n most active DM pairs by message count."""
+    counts = Counter(frozenset((r["sender"], r["recipient"])) for r in load_dms(run_dir))
+    return counts.most_common(n)
+
+
 def print_portfolio_table(run_dir: Path, agents: list[dict]) -> None:
     rows = final_returns(run_dir, agents)
     print(f"\n== Final portfolio (cycle {len(open(run_dir / 'portfolio_performance.csv').readlines()) - 1}) ==")
@@ -49,12 +79,10 @@ def print_portfolio_table(run_dir: Path, agents: list[dict]) -> None:
 
 
 def print_audit_summary(run_dir: Path) -> None:
-    path = run_dir / "audit_report.json"
-    if not path.exists():
+    report = load_audit_report(run_dir)
+    if report is None:
         print("\n(no audit_report.json -- auditor was disabled for this run)")
         return
-    with open(path) as f:
-        report = json.load(f)
     s = report["summary"]
     print(f"\n== Audit summary ==")
     print(f"Actions audited: {s['total_actions_audited']}")
@@ -74,23 +102,13 @@ def print_audit_summary(run_dir: Path) -> None:
 
 
 def print_dm_counts(run_dir: Path, pair: tuple[str, str] | None) -> None:
-    with open(run_dir / "messages.csv") as f:
-        rows = list(csv.DictReader(f))
-    dms = [r for r in rows if r["recipient"] != "all"]
-
     if pair:
         a, b = pair
-        count = sum(
-            1 for r in dms
-            if {r["sender"], r["recipient"]} == {a, b}
-        )
-        print(f"\nDMs between {a} <-> {b}: {count}")
+        print(f"\nDMs between {a} <-> {b}: {dm_count(run_dir, a, b)}")
         return
 
-    from collections import Counter
-    counts = Counter(frozenset((r["sender"], r["recipient"])) for r in dms)
     print("\n== Top DM pairs by volume ==")
-    for pair_set, count in counts.most_common(8):
+    for pair_set, count in top_dm_pairs(run_dir):
         a, b = sorted(pair_set)
         print(f"  {a:<15} <-> {b:<15} {count}")
 
