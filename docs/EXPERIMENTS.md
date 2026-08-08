@@ -14,8 +14,11 @@ python3 agents/run.py --setup                     # register all 10 agents
 python3 run_experiment.py --cycles 50 --delay 10   # live prices, 50 cycles
 ```
 
-Set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` with `LLM_PROVIDER=openai`) in
-`.env` first — every cycle makes one LLM call per agent.
+Copy [`../.env.example`](../.env.example) to `.env`, fill in
+`ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` with `LLM_PROVIDER=openai`),
+and `set -a; source .env; set +a` before running — this script reads
+plain environment variables, it does not load `.env` itself. Every
+cycle makes one LLM call per agent.
 
 ## CLI reference
 

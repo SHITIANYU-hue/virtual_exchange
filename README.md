@@ -89,11 +89,15 @@ python3 agents/run.py --setup
 python3 run_experiment.py --cycles 50 --delay 10
 ```
 
-Set `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` with `LLM_PROVIDER=openai`) in
-`.env` before running an experiment. See [`docs/API.md`](docs/API.md) for
-every operation with runnable `curl` examples, including the historical
-replay mode, and [`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for the
-full experiment-runner CLI/env-var reference.
+`run_experiment.py` and `agents/run.py` read `ANTHROPIC_API_KEY` (or
+`OPENAI_API_KEY` with `LLM_PROVIDER=openai`) as a plain environment
+variable — copy [`.env.example`](.env.example) to `.env`, fill it in, and
+`set -a; source .env; set +a` before running either script; neither
+auto-loads `.env` on its own. See
+[`docs/API.md`](docs/API.md) for every operation with runnable `curl`
+examples, including the historical replay mode, and
+[`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for the full
+experiment-runner CLI/env-var reference.
 
 ### Local development (without Docker)
 
@@ -290,4 +294,4 @@ Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#4-uniswap-v3-amm-engine--
 
 ## License
 
-MIT
+[MIT](LICENSE)
