@@ -1,0 +1,50 @@
+version: "3.8"
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: agent_metaverse
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/agent_metaverse
+      # Historical replay mode (see docs/ARCHITECTURE.md, section 12).
+      # Unset/live by default; set PRICE_MODE=replay REPLAY_WORLD=A|B before
+      # `docker compose up` to switch. REPLAY_WORLD is a blind label — the
+      # actual scenario is resolved inside the container from the mounted
+      # mapping file below, so it never appears on the host command line's
+      # own environment beyond the meaningless "A"/"B".
+      PRICE_MODE: ${PRICE_MODE:-live}
+      REPLAY_WORLD: ${REPLAY_WORLD:-}
+    volumes:
+      # Read-only; not part of the image build context, so replay data and the
+      # private world mapping can change without a rebuild. Both are gitignored.
+      - ./.private_world_mapping.json:/app/private_world_mapping.json:ro
+      - ./scenarios/hourly_replay:/app/hourly_replay_data:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
