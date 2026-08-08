@@ -10,10 +10,9 @@ including through deception, manipulation, and betrayal.
 Built as a research platform for studying emergent behavior in adversarial
 multi-agent LLM systems: manipulation dynamics, coalition formation, and
 whether an LLM-judge trading guardrail changes agent behavior under
-different (real, historically-replayed) market regimes. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system design and
-[`analysis/`](analysis/) for
-results.
+different (real, historically-replayed) market regimes. The repository bundles
+the exchange backend, observation UI, agent ecosystem, trading guardrail,
+historical replay scenarios, and experiment runner in one deployable codebase.
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -93,11 +92,9 @@ python3 run_experiment.py --cycles 50 --delay 10
 `OPENAI_API_KEY` with `LLM_PROVIDER=openai`) as a plain environment
 variable — copy [`.env.example`](.env.example) to `.env`, fill it in, and
 `set -a; source .env; set +a` before running either script; neither
-auto-loads `.env` on its own. See
-[`docs/API.md`](docs/API.md) for every operation with runnable `curl`
-examples, including the historical replay mode, and
-[`docs/EXPERIMENTS.md`](docs/EXPERIMENTS.md) for the full
-experiment-runner CLI/env-var reference.
+auto-loads `.env` on its own. Runtime defaults are listed in
+[`.env.example`](.env.example); use `python3 run_experiment.py --help` and
+`python3 agents/run.py --help` for the available CLI options.
 
 ### Local development (without Docker)
 
@@ -150,10 +147,6 @@ python3 skill/scripts/skill.py portfolio
 python3 skill/scripts/skill.py send-message --to all --content "ETH is pumping!"
 ```
 
-(Running from an OpenClaw-managed install instead of this clone? See
-[`skill/SKILL.md`](skill/SKILL.md) — its `scripts/skill.py` paths are
-relative to the `skill/` directory itself.)
-
 ### REST API
 
 ```bash
@@ -165,7 +158,8 @@ curl http://localhost:8000/api/prices
 curl http://localhost:8000/api/account/balance -H "X-API-Key: amv_xxx"
 ```
 
-Full endpoint reference: [`docs/API.md`](docs/API.md).
+When the backend is running, its interactive OpenAPI reference is available at
+http://localhost:8000/docs.
 
 ## Adversarial Agent Ecosystem
 
@@ -187,7 +181,8 @@ Agents run a [ReAct](https://arxiv.org/abs/2210.03629) reasoning loop with
 persistent cross-cycle memory (strategy, alliances, lessons learned) and
 execute in 4 phases per cycle (Observe → Manipulate → React → Adjust) so
 information gatherers act before manipulators, who act before reactive
-agents. Full framework details in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#6-agent-system).
+agents. Role definitions live in [`agents/ecosystem.json`](agents/ecosystem.json),
+with role-specific prompts under [`agents/prompts/`](agents/prompts/).
 
 ```bash
 python3 agents/run.py --agent GoldenWhale --action prompt   # generate this agent's full ReAct prompt
@@ -195,7 +190,7 @@ python3 agents/run.py --agent GoldenWhale --action execute --action-file action.
 python3 agents/run.py --status                              # execution order, phases, PnL
 ```
 
-## Historical Replay & Experiment Results
+## Historical Replay & Experiments
 
 Instead of (or alongside) live Binance prices, the price engine can replay a
 real historical hourly BTC/ETH/SOL path — bull, bear, or sideways — with
@@ -215,19 +210,9 @@ python3 run_experiment.py --world A --cycles 72 --hard-reset
 paper arm (World A/B/C × auditor on/off, plus the live-price baseline) with
 the exact CLI flags and env vars used to produce it.
 
-Results and interactive visualizations from completed experiment batches are
-in [`analysis/`](analysis/), alongside [`analysis/analyze_run.py`](analysis/analyze_run.py)
-(stdlib-only — recomputes the headline PnL/dispersion/audit numbers from a
-run's raw output) and [`analysis/sample_data/`](analysis/sample_data/) (the
-runs those numbers come from). [`sample_data/`](sample_data/)
-keeps one full run's raw output in the repo as a concrete example; the
-complete raw dataset (all runs, all regimes) is published separately — see
-that directory's README for the link.
-
-```bash
-python3 analysis/analyze_run.py sample_data
-python3 analysis/test_analyze_run.py   # unit tests, run against that same sample data
-```
+Each run writes its CSV/JSON trace to `experiment_logs/` by default, or to the
+directory selected with `--output-dir`. Generated traces and derived analysis
+artifacts are intentionally kept outside this source repository.
 
 ## Project Structure
 
@@ -238,12 +223,12 @@ python3 analysis/test_analyze_run.py   # unit tests, run against that same sampl
 │   │   ├── main.py              # FastAPI entry point
 │   │   ├── config.py            # Settings (Pydantic), incl. replay mode
 │   │   ├── database.py          # Async SQLAlchemy
-│   │   ├── models/               # DB models
-│   │   ├── schemas/              # Pydantic request/response
-│   │   ├── api/                  # Route handlers
-│   │   ├── services/              # spot, futures, V3 AMM, liquidation, price engine
-│   │   ├── middleware/            # JWT + API Key auth
-│   │   └── websocket/              # Price broadcaster
+│   │   ├── models/              # DB models
+│   │   ├── schemas/             # Pydantic request/response
+│   │   ├── api/                 # Route handlers
+│   │   ├── services/            # spot, futures, V3 AMM, liquidation, price engine
+│   │   ├── middleware/          # JWT + API Key auth
+│   │   └── websocket/           # Price broadcaster
 │   ├── alembic/                  # DB migrations
 │   └── Dockerfile
 ├── frontend/                     # React/TypeScript/Vite (human observation UI)
@@ -256,20 +241,12 @@ python3 analysis/test_analyze_run.py   # unit tests, run against that same sampl
 │   ├── trade_gate.py             # orchestrator: rule + stat + LLM scoring -> verdict
 │   └── ...
 ├── discovery/                    # open-set manipulation pattern mining
-├── run_experiment.py             # multi-cycle experiment runner
 ├── configs/                      # preset shell scripts, one per paper experiment arm
-├── scenarios/                    # historical replay price data + downloader
-├── sample_data/                  # one full example run (raw dataset published externally)
-├── analysis/
-│   ├── analyze_run.py            # recompute headline stats from a run's raw output
-│   ├── test_analyze_run.py       # unit tests (run against sample_data/)
-│   └── sample_data/              # curated results + interactive visualizations
-├── skill/                        # OpenClaw Skill
-├── docker-compose.yml
-└── docs/
-    ├── ARCHITECTURE.md           # full system design
-    ├── API.md                    # every endpoint, with runnable examples
-    └── EXPERIMENTS.md            # experiment runner CLI/env-var reference
+├── scenarios/                    # historical replay price data and downloader
+├── skill/
+│   └── scripts/                  # OpenClaw command integration
+├── run_experiment.py             # multi-cycle experiment runner
+└── docker-compose.yml
 ```
 
 ## Trading Mechanics
@@ -290,7 +267,6 @@ Full concentrated-liquidity implementation: tick-indexed pricing,
 `liquidityNet`/tick bitmap, `feeGrowthOutside`, cross-tick swap stepping.
 Fee tiers: 0.05% / 0.3% / 1.0%. Swaps move the pool price; concentrated
 positions only earn fees while price trades within `[tick_lower, tick_upper)`.
-Details: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#4-uniswap-v3-amm-engine--detailed-implementation).
 
 ## License
 
