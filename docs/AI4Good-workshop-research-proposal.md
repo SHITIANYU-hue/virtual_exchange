@@ -156,6 +156,35 @@ all. Treat as stretch goals (Section 3) given the deadline — flag as future
 work if not completed, but scope them concretely enough in the paper that
 "future work" doesn't read as filler.
 
+**RQ5 (from the paper's own Section 5 — who bears the cost of enforcement).**
+Section 5 already states the question and never answers it: "one price path
+or aggregate return alone can obscure who benefits and who bears the cost of
+enforcement." Is auditor protection distributed equitably across capital
+tiers? Concretely: does block/flag rate, conditioned on candidate class,
+differ systematically between whale/market-maker roles ($500K) and retail
+roles ($10K) — and separately, are retail agents' own defensive or
+reactive actions more likely to be misclassified than whales' offensive
+ones? This doesn't need either external reference paper — it operationalizes
+a question the paper already poses about itself, which makes it a
+low-risk, high-relevance addition for a "for Good"/equity-of-protection
+angle the General Track explicitly wants ("AI for social good with
+real-world impact evidence").
+
+**RQ6 (isolation and third-party harm — shared with the AgenticOS
+proposal's RQ3).** The existing Finding-1 trace already contains a
+documented case of harm to a non-participating agent: LeverageKing, never
+directly interacting with GoldenWhale, lost \$1,870 in marked value as a
+side effect of GoldenWhale's eventually-allowed exit. Is this a one-off or
+a general pattern — how much of a non-participating agent's outcome
+variance is attributable to *other* agents' authorized-but-harmful actions,
+not its own decisions? Framed for this venue as a direct "who bears the
+cost of AI-agent harm" accountability question, distinct from the same
+re-analysis framed as a systems-isolation question in the parallel
+AgenticOS proposal (`docs/agenticos-workshop-research-proposal.md`, RQ3).
+**Run this analysis once and write it up twice** — the underlying
+computation over `portfolio_performance.csv` and `audit_events.csv` is
+identical; only the framing differs between the two submissions.
+
 ---
 
 ## 3. Experiments to add, ranked by cost vs. deadline
@@ -183,6 +212,17 @@ infrastructure they need versus what the codebase already has.
   own, but strengthens "a relation repeated within a matched condition" —
   the evidentiary bar the paper sets for itself in Finding 4 — with one more
   data point per bar.
+- **E-RQ5 — equitable-protection breakdown.** No new runs; group the
+  existing `audit_events.csv` verdicts by agent capital tier (whale/market
+  maker $500K, mid-tier $50K, retail $10K) and compare block/flag rates
+  within candidate class, plus a spot check of whether retail agents'
+  defensive actions get misclassified more often than whales' offensive
+  ones. Pure `pandas`-style groupby over data that already exists.
+- **E-RQ6 — isolation/third-party-harm re-analysis.** No new runs; same
+  computation as the AgenticOS proposal's RQ3 (portfolio-value deltas for
+  non-participating agents in the 1–3 cycles following a flagged/blocked
+  sequence elsewhere in the same world). Compute once, write up in both
+  submissions with different framing — see the note in Section 2.
 
 ### Tier 2 — moderate new work, directly answers the CFP
 
@@ -223,9 +263,11 @@ infrastructure they need versus what the codebase already has.
   behaviors" but is the most novel-infrastructure item on this list.
 
 ### Suggested sequencing
-Given the deadline, Tier 1 should be treated as required (all three are low
-cost and directly strengthen existing findings), E1 and E2 in Tier 2 should
-be prioritized over anything in Tier 3 since they are the only two items that
-directly answer the Multi-Agent Track's named topics rather than just adding
-statistical power, and Tier 3 items should be scoped in the paper as named,
-concrete future work rather than attempted if time is short.
+Given the deadline, Tier 1 should be treated as required — all five items
+are pure analysis of data that already exists and directly strengthen
+existing findings or answer a question (RQ5, RQ6) the paper already poses
+about itself. E1 and E2 in Tier 2 should be prioritized over anything in
+Tier 3 since they are the only two items that directly answer the
+Multi-Agent Track's named topics rather than just adding statistical power
+or accountability framing, and Tier 3 items should be scoped in the paper as
+named, concrete future work rather than attempted if time is short.
