@@ -8,19 +8,27 @@
   :root {
     --bg: #0b0d12;
     --surface: #12151c;
+    --surface-2: #171b24;
     --ink: #e8eaf0;
     --ink-muted: #9aa1b2;
     --accent: #6ea8fe;
+    --accent-dim: #3d6bb8;
     --border: #232733;
+    --good: #5fd0a3;
+    --bad: #ef7b7b;
   }
   @media (prefers-color-scheme: light) {
     :root {
       --bg: #f7f8fa;
       --surface: #ffffff;
+      --surface-2: #f0f2f6;
       --ink: #14161c;
       --ink-muted: #5a6072;
       --accent: #2f6fed;
+      --accent-dim: #d7e3fd;
       --border: #e2e4ea;
+      --good: #1f9d6e;
+      --bad: #d1495b;
     }
   }
   * { box-sizing: border-box; }
@@ -32,32 +40,56 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     display: flex;
     justify-content: center;
-    padding: 6vh 1.5rem;
+    padding: 6vh 1.5rem 4vh;
   }
-  main { max-width: 720px; width: 100%; }
+  main { max-width: 780px; width: 100%; }
   h1 {
-    font-size: 1.75rem;
-    margin: 0 0 0.5rem;
+    font-size: 1.85rem;
+    margin: 0 0 0.6rem;
     letter-spacing: -0.02em;
   }
   p.lede {
     color: var(--ink-muted);
-    line-height: 1.6;
-    margin: 0 0 2.5rem;
+    line-height: 1.65;
+    margin: 0 0 1rem;
+    max-width: 60ch;
+  }
+  p.lede + p.lede { margin-bottom: 2rem; }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 2.5rem;
+  }
+  .pill {
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.3rem 0.7rem;
+  }
+  h2.section-label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-muted);
+    margin: 0 0 1rem;
+    font-weight: 600;
   }
   ul.reports {
     list-style: none;
     padding: 0;
-    margin: 0;
+    margin: 0 0 2.5rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
   }
   a.card {
     display: block;
-    padding: 1.25rem 1.5rem;
+    padding: 1.4rem 1.6rem;
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: 14px;
     background: var(--surface);
     text-decoration: none;
     color: inherit;
@@ -67,58 +99,196 @@
     border-color: var(--accent);
     transform: translateY(-1px);
   }
-  .card h2 {
-    margin: 0 0 0.35rem;
-    font-size: 1.05rem;
+  .card h3 {
+    margin: 0 0 0.4rem;
+    font-size: 1.1rem;
     color: var(--accent);
   }
-  .card p {
-    margin: 0;
+  .card p.desc {
+    margin: 0 0 1rem;
     color: var(--ink-muted);
     font-size: 0.9rem;
-    line-height: 1.5;
+    line-height: 1.55;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.6rem;
+  }
+  .stat {
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+  }
+  .stat .num {
+    display: block;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--ink);
+  }
+  .stat .num .up { color: var(--good); }
+  .stat .num .down { color: var(--bad); }
+  .stat .label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--ink-muted);
+    margin-top: 0.15rem;
+  }
+  .card .open {
+    display: inline-block;
+    margin-top: 1rem;
+    font-size: 0.82rem;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .card .open::after { content: " →"; }
+  details.about {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 1rem 1.4rem;
+    margin-bottom: 2rem;
+  }
+  details.about summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--ink);
+  }
+  details.about[open] summary { margin-bottom: 0.8rem; }
+  details.about p, details.about ul {
+    color: var(--ink-muted);
+    font-size: 0.88rem;
+    line-height: 1.6;
+  }
+  details.about ul { padding-left: 1.2rem; margin: 0.6rem 0; }
+  details.about code {
+    background: var(--surface-2);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.85em;
   }
   footer {
-    margin-top: 3rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
     color: var(--ink-muted);
-    font-size: 0.8rem;
+    font-size: 0.82rem;
+    display: flex;
+    gap: 1.2rem;
+    flex-wrap: wrap;
   }
-  footer a { color: inherit; }
+  footer a { color: inherit; text-decoration: underline; text-decoration-color: var(--border); }
+  footer a:hover { text-decoration-color: var(--accent); }
 </style>
 </head>
 <body>
 <main>
   <h1>Agent Metaverse — Experiment Results</h1>
   <p class="lede">
-    Interactive visualizations from the adversarial multi-agent trading
-    simulation. Agents trade spot, futures, and AMM under real historical
-    market replays while an LLM-in-the-loop auditor evaluates every action.
+    A virtual crypto exchange populated by adversarial LLM agents — whale,
+    shill, insider, short seller, liquidation hunter, market maker, and
+    retail roles trading spot, futures, and a full Uniswap V3 AMM against
+    each other, with an LLM-in-the-loop wallet auditor pre-screening every
+    trade.
   </p>
+  <p class="lede">
+    Below are the two curated result reports: interactive charts, per-agent
+    return trajectories, coordination traces, and audit-verdict breakdowns
+    from the full experiment matrix.
+  </p>
+
+  <div class="meta-row">
+    <span class="pill">10 agents · 8 adversarial roles</span>
+    <span class="pill">72-cycle historical replays</span>
+    <span class="pill">block / flag / allow wallet verdicts</span>
+  </div>
+
+  <h2 class="section-label">Reports</h2>
   <ul class="reports">
     <li>
       <a class="card" href="world-a-vs-world-b-comparison.html">
-        <h2>World A vs. World B — 72-cycle replay comparison</h2>
-        <p>
-          Two blind historical market regimes (real bull/bear BTC/ETH/SOL
-          price paths), same 10-agent roster, same auditor configuration —
-          full per-agent PnL trajectories, coordination traces, and audit
-          category breakdowns.
+        <h3>World A vs. World B — 72-cycle replay comparison</h3>
+        <p class="desc">
+          Two blind historical market regimes (real, time-blinded BTC/ETH/SOL
+          72-hour price paths), same 10-agent roster, same starting capital,
+          same auditor configuration — the only difference is which real
+          historical window was replayed.
         </p>
+        <div class="stats">
+          <div class="stat">
+            <span class="num"><span class="down">−12%</span> to <span class="up">+29%</span></span>
+            <span class="label">World A return spread</span>
+          </div>
+          <div class="stat">
+            <span class="num"><span class="down">−91%</span> to <span class="up">+106%</span></span>
+            <span class="label">World B return spread</span>
+          </div>
+          <div class="stat">
+            <span class="num">37.8% / 36.0%</span>
+            <span class="label">flag rate, A vs. B (nearly identical)</span>
+          </div>
+        </div>
+        <span class="open">Open report</span>
       </a>
     </li>
     <li>
       <a class="card" href="auditor-comparison.html">
-        <h2>Auditor ON vs. OFF — 8-run comparison</h2>
-        <p>
-          Eight identical runs crossing two market regimes with the
-          LLM-judge trading guardrail enabled and disabled, including a
+        <h3>Auditor ON vs. OFF — 8-run comparison</h3>
+        <p class="desc">
+          Eight identical 72-cycle runs crossing two market regimes with the
+          LLM-judge wallet guardrail enabled and disabled, plus a
           rerun-to-rerun stability check and a live-price baseline arm.
         </p>
+        <div class="stats">
+          <div class="stat">
+            <span class="num"><span class="up">6.8%</span> vs. <span class="up">46.6%</span></span>
+            <span class="label">whale avg. return, auditor on vs. off (World A)</span>
+          </div>
+          <div class="stat">
+            <span class="num">−0.03 to 0.21</span>
+            <span class="label">rerun rank correlation (Spearman ρ)</span>
+          </div>
+          <div class="stat">
+            <span class="num">8 runs</span>
+            <span class="label">2 worlds × 2 auditor modes × 2 reruns</span>
+          </div>
+        </div>
+        <span class="open">Open report</span>
       </a>
     </li>
   </ul>
+
+  <details class="about">
+    <summary>About this project</summary>
+    <p>
+      Agents receive role-specific economic objectives — pump &amp; dump,
+      front-running, liquidation hunting, market making — but no scripted
+      orders, messages, or exit schedule. Every proposed trade passes
+      through a pre-execution wallet policy that returns an
+      <code>allow</code> / <code>flag</code> / <code>block</code> verdict
+      before it reaches the exchange; public and private messages remain
+      outside that gate. Historical BTC/ETH/SOL price replays are
+      time-blinded — each turn reveals only the preceding completed hour,
+      with no dates or regime labels.
+    </p>
+    <ul>
+      <li>Full Uniswap V3 concentrated-liquidity AMM (tick math, tick bitmap, cross-tick swaps)</li>
+      <li>Pump.fun-style one-click token launchpad</li>
+      <li>Perpetual futures with auto-liquidation</li>
+      <li>Rule-based + statistical + LLM-judge threat scoring, combined into a wallet verdict</li>
+    </ul>
+    <p>
+      Source, the experiment runner, and a full example run's raw output
+      are in the linked repository below.
+    </p>
+  </details>
+
   <footer>
     <a href="https://github.com/SHITIANYU-hue/virtual_exchange">SHITIANYU-hue/virtual_exchange</a>
+    <a href="https://github.com/SHITIANYU-hue/virtual_exchange/blob/release/docs/ARCHITECTURE.md">Architecture doc</a>
+    <a href="https://github.com/SHITIANYU-hue/virtual_exchange/tree/release/experiments">Experiment runner</a>
   </footer>
 </main>
 </body>
