@@ -4,8 +4,36 @@ This document plans the revision of the AAAI 2026 submission *"Your Agent Says Y
 Emergent Market Misconduct in Agentic Trading"* into a submission for the
 [Trustworthy AI for Good workshop](https://trustworthy-ai-for-good.github.io/#overview)
 at NeurIPS 2026 (Paris). It covers three things: what the paper itself needs to
-change, a research plan grounded in two multi-agent-security surveys, and the
-concrete new experiments that plan implies.
+change, a research plan grounded in two multi-agent-security surveys plus four
+empirical papers from the ICML 2026 sister-edition of this same workshop, and
+the concrete new experiments that plan implies.
+
+**Update (Aug 15):** the ICML 2026 edition of AI4GOOD has already run (Seoul,
+July 10) and its award list is public. Four of those papers — one CoopAI Best
+Paper, two CoopAI Outstanding, and one General Track Honourable Mention — are
+close enough in method or topic to this paper that they've been read in full
+and folded into this plan (see §1.3, §1.6, §1.7, and the reference list in
+§4). These are a higher-value signal than the two survey papers alone: they
+are not just "what this field cares about," they are literally this venue's
+own bar for what an accepted/awarded paper looks like.
+
+**Correction (this pass):** a fifth paper, "Hand and Brain: Defenses against
+Agentic Steganography in Language Models" (attributed to Krzyzanowski,
+Arcuschin, Lee, Meyer, Lange), was cited in an earlier version of this
+document and has been removed. It could not be verified by search under
+that title/author combination; the closest real match found was a
+different, unrelated 2025 paper ("Scales of AI Covert Communication," MIT)
+sharing two author surnames (Krzyzanowski, Arcuschin) but no other overlap.
+Treat it as unverified/likely fabricated. Everything that depended on it —
+the syntactic/semantic-"agentic"-channel framing for steganography — has
+been removed along with it; §1.4/§2/§3's steganography items are back to
+testing message wording only, not a second "agentic channel." The other
+four papers (SCHEME, Norm Enforcement, CoopEval, Za et al.) were each
+independently confirmed to exist via arXiv/OpenReview search, though the
+more granular technical claims attributed to them below (e.g., Norm
+Enforcement's exact three update-rule formalism) have only been checked
+against abstracts, not full text — verify against the actual PDF before
+relying on those specifics in a submission.
 
 ## 0. Workshop constraints (source of truth for everything below)
 
@@ -62,10 +90,11 @@ General Track wants "AI for social good with real-world impact evidence" and
   specific findings (Finding 1 → sequence-linked risk state; Finding 2 →
   report role-level, not just aggregate, outcomes).
 
-### 1.3 Engage the two suggested papers in Related Work
-Both are directly relevant and currently absent from the paper's related-work
-section (2.1/2.2), which cites deployment products and manipulation/scam
-literature but no general multi-agent-security taxonomy:
+### 1.3 Engage the survey papers — and the workshop's own award papers — in Related Work
+All of the below are directly relevant and currently absent from the paper's
+related-work section (2.1/2.2), which cites deployment products and
+manipulation/scam literature but no general multi-agent-security taxonomy and
+no empirical precedent from this exact venue:
 
 - **Hammond et al., "Multi-Agent Risks from Advanced AI"** (arXiv:2502.14143)
   gives three failure modes (miscoordination, conflict, collusion) and seven
@@ -88,6 +117,28 @@ literature but no general multi-agent-security taxonomy:
   measured instance of a challenge this survey only poses abstractly, and
   gives a citable source for the "steganographic communication" framing used
   in Section 1.4 below.
+- **Radev, Haas, Arnav, Bernabeu-Pérez, "The Best-Laid SCHEMEs: Coordinated
+  Sabotage and Monitoring in Multi-Agent Systems"** (AI4GOOD @ ICML 2026,
+  CoopAI Outstanding Paper) is the closest empirical analog this paper has —
+  closer than either survey. It studies exactly the same shape of problem
+  (a team of agents pursuing a covert joint objective while a trusted monitor
+  watches, with financial tasks — including a *portfolio-optimization*
+  side-task setting — among its seven domains) and reports results the same
+  way this paper should: monitor **TPR at a fixed FPR operating point**
+  (≤2%), an explicit ablation of *what the monitor is allowed to see*
+  (code-only vs. code+communication), and a "stealth-aware" condition where
+  agents are told a monitor is present — which cuts attacker success without
+  denting detection, the same qualitative shape as this paper's turns-49–53
+  block→flag reclassification. Cite it as direct precedent for the auditor
+  framing, and adopt its reporting convention (§1.6).
+- **Ye & Steinhardt, "Norm Enforcement for AI Agents: Robustly Shaping
+  Behavior in Multi-Agent Systems"** (AI4GOOD @ ICML 2026, CoopAI Best Paper)
+  is less a topical match than a *design-pattern* one: it gives three formal
+  update rules for a cross-turn reputation/risk score (symmetric, fixed-
+  asymmetric, escalating) with proofs of which ones can be gamed
+  indefinitely and which one provably can't. This directly upgrades RQ-E2's
+  "history-aware wallet policy" from a single ad hoc heuristic into a
+  principled comparison — see §2 and §3.
 
 ### 1.4 Either add the steganography experiment, or name the gap explicitly
 Given the deadline, there are two honest options, not one required one:
@@ -111,9 +162,60 @@ infrastructure names (e.g., a specific university's cluster), and the GitHub
 org name `SHITIANYU-hue` if any repository screenshots or paths are ever
 pasted into the appendix.
 
+### 1.6 Adopt this venue's reporting conventions
+Reading the four ICML 2026 award papers side by side surfaces a consistent
+methodological bar that this draft currently falls short of on two counts:
+
+- **Report rates as detection/containment performance at a fixed operating
+  point, not raw percentages.** SCHEME reports monitor performance as "TPR at
+  FPR≤2%," which is directly transferable: the wallet auditor is a monitor,
+  candidate classes are the workload, and block/flag verdicts are the
+  monitor's calls. Reframe Finding 1's 45.8%/11.2% comparison (and the new
+  E1/E2 results) in these terms where a false-positive rate can be defined
+  (e.g., legitimate-looking proposals later confirmed benign by human
+  review), and — copying SCHEME's most useful ablation — report what happens
+  to that rate when the auditor's visible input changes (transaction-only,
+  as today, vs. transaction+message, as in E1).
+- **State the backbone model(s) explicitly, and be honest about statistical
+  power.** CoopEval (6–9 models), Za et al. (7 models, 200,000+ decisions),
+  and SCHEME (N=85 trajectories/model with Wilson 95% CIs on every rate) are
+  the norm at this venue; this paper's current n=2 reruns/cell and
+  undisclosed backbone model(s) are well below it. This is not fixable by
+  the deadline, but it is fixable to *disclose* — see §1.7. Where the paper
+  does report a rate over a small N (Finding 4's Spearman correlations from
+  n=2/3 reruns in particular), say the N inline next to the number, not only
+  in a figure caption, and avoid presenting it as more than exploratory
+  evidence of a direction.
+
+### 1.7 Add a Limitations section (currently absent from the draft)
+None of the four award papers skip this, and Norm Enforcement's is a good
+template: it doesn't just list caveats, it states precisely what its formal
+results do and don't cover ("these propositions characterize a single
+agent's reputation dynamics in isolation under stationary strategies... they
+do not model adaptive strategies... or population-level dynamics"). Draft a
+comparably precise paragraph for this paper, e.g.:
+
+> This study characterizes agent behavior in a single simulator (Virtual
+> Exchange) across two/three replay windows, [N backbone model(s)], with
+> n=2–3 reruns per experimental cell. It does not establish how these
+> containment failures generalize across simulators, market regimes beyond
+> the replayed windows, or model families beyond [X]. The role-conditioned
+> design (§1.1/§3.4) demonstrates red-team-elicited misconduct under
+> role-assigned economic objectives; it does not by itself establish that
+> the same misconduct would arise from a neutral objective absent
+> role-conditioning (see the emergent-vs.-induced framing decision this
+> paper makes explicitly). Candidate-class statistics in §4 are computed
+> over auditor-assigned labels; the human-adjudicated ground-truth layer
+> (§3.5) is [aggregated in Table X / reported only as a qualitative trace —
+> update once §2's evidence-level table is done].
+
+This is a required section, not an optional one, at this venue's evidenced
+bar — treat it as Tier 1 work in §3 (near-zero cost, since it is mostly
+honest bookkeeping of decisions already made elsewhere in this document).
+
 ---
 
-## 2. Research plan (grounded in the two papers above)
+## 2. Research plan (grounded in the papers above)
 
 The plan is to use Hammond et al.'s taxonomy as the *organizing structure*
 for what the paper already has, and Open Challenges in Multi-Agent Security's
@@ -137,7 +239,19 @@ score per agent or per token across turns, instead of scoring each proposal
 independently — close the persistence gap documented in Finding 1 (four
 blocked GoldenWhale liquidation requests followed by a fifth, differently
 classified, non-blocking one)? This directly tests the paper's own proposed
-fix in Section 5 rather than leaving it as an assertion.
+fix in Section 5 rather than leaving it as an assertion. **Refinement from
+Norm Enforcement (§1.3):** rather than one ad hoc escalating-score design,
+implement and compare the three formally-motivated update rules from that
+paper's reputation mechanism — symmetric (linear penalty), fixed-asymmetric
+(linear, weighted toward penalties), and escalating (quadratic penalty
+growth) — applied here to accumulated suspicion per agent/token instead of
+per-report reliability. Their proofs show the symmetric and fixed-asymmetric
+rules both admit a stable "laundering" plateau an adversarial agent can
+operate under indefinitely, while the escalating rule provably closes it;
+replaying the existing eight traces under all three turns this from one
+heuristic fix into a principled three-way comparison with a citable
+theoretical prediction to test against ("does escalating outperform the
+other two on the turns-49–53 case, as the theory predicts?").
 
 **RQ-E3 (from 2502.14143 — commitment problems).** Among agent pairs that
 privately coordinate a pump-and-dump (already present in the trace data used
@@ -194,6 +308,14 @@ infrastructure they need versus what the codebase already has.
 
 ### Tier 1 — cheap, do these first
 
+- **E0 — required disclosures (§1.6/§1.7).** State the backbone model(s) for
+  the ten trading agents and the auditor's LLM-judgment component; add the
+  Limitations paragraph drafted in §1.7; and, anywhere the paper reports a
+  rate computed from a small N (Finding 4 especially), put the N inline next
+  to the number. Zero new data collection — this is writing, not
+  experimentation — but per §1.6 it is close to a hard requirement for
+  credibility at this venue, so it belongs in Tier 1 despite not being an
+  "experiment."
 - **E3 — add the third replay regime (World C / sideways).**
   The codebase already has this: `configs/world_c_auditor.sh` and
   `configs/world_c_noauditor.sh` exist and have been smoke-tested against the
@@ -234,15 +356,23 @@ infrastructure they need versus what the codebase already has.
   alongside the existing on/off auditor modes. Read the resulting messages
   (LLM-assisted coding, then human spot-check, matching the paper's existing
   two-reviewer protocol) for indirect language, euphemism, or coded
-  references that increase relative to the baseline runs. Report the result
-  either way — a null result is still evidence for the CFP's question.
-- **E2 — history-aware wallet policy (RQ-E2).** Add a second auditor variant
-  that maintains cross-turn state (e.g., an escalating suspicion score keyed
-  on agent-pair or token, decaying over turns) instead of the current
-  proposal-local scoring. Rerun the same replay windows with this as a third
-  auditor mode. The target result is a direct, falsifiable test of Finding
-  1's turns-49–53 sequence: does the stateful policy block the fifth
-  liquidation request that the current stateless policy allowed?
+  references that increase relative to the baseline runs. **Report using
+  SCHEME's convention**: TPR at a fixed FPR operating point for "auditor
+  with message access" vs. the existing transaction-only auditor, rather
+  than raw block-rate deltas. Report the result either way — a null result
+  is still evidence for the CFP's question.
+- **E2 — history-aware wallet policy (RQ-E2).** Add auditor variants that
+  maintain cross-turn state — implement **all three of Norm Enforcement's
+  update rules** (symmetric, fixed-asymmetric, escalating; see §2) applied
+  to a cumulative suspicion score keyed on agent-pair or token, rather than
+  a single ad hoc heuristic — instead of the current proposal-local scoring.
+  Rerun the same replay windows with these as additional auditor modes. The
+  target result is a direct, falsifiable test of Finding 1's turns-49–53
+  sequence: does the stateful policy block the fifth liquidation request
+  that the current stateless policy allowed, and if so, is it specifically
+  the escalating rule that does it (as the theory predicts) or do all three
+  variants perform similarly (a negative result for the theoretical
+  prediction, which is itself worth reporting)?
 
 ### Tier 3 — stretch goals, scope as future work if time runs out
 
@@ -263,11 +393,45 @@ infrastructure they need versus what the codebase already has.
   behaviors" but is the most novel-infrastructure item on this list.
 
 ### Suggested sequencing
-Given the deadline, Tier 1 should be treated as required — all five items
-are pure analysis of data that already exists and directly strengthen
-existing findings or answer a question (RQ5, RQ6) the paper already poses
-about itself. E1 and E2 in Tier 2 should be prioritized over anything in
-Tier 3 since they are the only two items that directly answer the
-Multi-Agent Track's named topics rather than just adding statistical power
-or accountability framing, and Tier 3 items should be scoped in the paper as
-named, concrete future work rather than attempted if time is short.
+Given the deadline, Tier 1 should be treated as required — all six items
+(including the new E0 disclosures) are pure analysis/writing over data that
+already exists and directly strengthen existing findings, answer a question
+(RQ5, RQ6) the paper already poses about itself, or close a credibility gap
+this venue's own award papers make hard to ignore (E0). E1 and E2 in Tier 2
+should be prioritized over anything in Tier 3 since they are the only two
+items that directly answer the Multi-Agent Track's named topics rather than
+just adding statistical power or accountability framing, and Tier 3 items
+should be scoped in the paper as named, concrete future work rather than
+attempted if time is short. Do E0 first regardless of what else gets cut —
+it's the cheapest item on the entire list and the one most likely to
+determine whether a reviewer trusts the rest of the paper's numbers.
+
+---
+
+## 4. New references to add (from the ICML 2026 AI4GOOD award list)
+
+All four are workshop papers from the ICML 2026 edition of AI4GOOD (Seoul,
+July 10, 2026), each independently confirmed to exist via arXiv/OpenReview
+search during this revision pass. Their arXiv IDs (verified) are given below;
+the award-track labels and the more granular technical claims attributed to
+each paper elsewhere in this document were checked only against abstracts,
+not full text — re-verify against the actual PDF before finalizing citations:
+
+- Radev, N., Haas, L., Arnav, B., Bernabeu-Pérez, P. "The Best-Laid SCHEMEs:
+  Coordinated Sabotage and Monitoring in Multi-Agent Systems." arXiv:2605.29178.
+  AI4GOOD @ ICML 2026 (CoopAI Track, Outstanding Paper — award-track label
+  not independently re-verified against the paper itself).
+- Ye, Y., Steinhardt, J. "Norm Enforcement for AI Agents: Robustly Shaping
+  Behavior in Multi-Agent Systems." arXiv:2607.09766. AI4GOOD @ ICML 2026
+  Trustworthy AI for Good Workshop (confirmed venue; award-track label not
+  independently re-verified).
+- Tewolde, E., Zhang, X., Piedrahita, D.G., Conitzer, V., Jin, Z. "CoopEval:
+  Benchmarking Cooperation-Sustaining Mechanisms and LLM Agents in Social
+  Dilemmas." arXiv:2604.15267. AI4GOOD @ ICML 2026 — cite only if space
+  allows, as general evidence for the venue's expectation of multi-model
+  evaluation (§1.6); not a direct topical fit.
+- Za, J., Panos, A., Čuhel, J. "Towards Predictive Models of Strategic
+  Behaviour in Large Language Model Agents." AI4GOOD @ ICML 2026 (General
+  Track) — confirmed via the author's personal academic homepage; arXiv ID
+  not yet located, check OpenReview directly. Same role as CoopEval above:
+  cite for the large-N/multi-model convention, not topical overlap.
