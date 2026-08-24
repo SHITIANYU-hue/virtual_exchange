@@ -18,7 +18,7 @@ REPO_ROOT = BACKEND_DIR.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from app.config import settings  # noqa: E402
-from app.services.price_engine import ReplayPriceSource, SEED_PRICES, TRADING_PAIRS, TOTAL_CANDLES  # noqa: E402
+from app.services.price_engine import ReplayPriceSource, SEED_PRICES, TRADING_PAIRS  # noqa: E402
 
 # Point settings at the real repo paths (not the /app/ paths used inside Docker).
 settings.replay_mapping_path = str(REPO_ROOT / "experiments" / ".private_world_mapping.json")
@@ -28,6 +28,7 @@ settings.replay_data_dir = str(REPO_ROOT / "experiments" / "scenarios" / "hourly
 def test_world(world_label: str):
     settings.replay_world = world_label
     src = ReplayPriceSource()
+    formal_hours = src.formal_hours  # per-world now, not a fixed 72
 
     # Starts on the pre-interval candle, rebased to the project's normal seed prices.
     assert src.turn == 0
@@ -35,22 +36,23 @@ def test_world(world_label: str):
     for pair in TRADING_PAIRS:
         assert snap0[pair] == SEED_PRICES[pair], f"{world_label}/{pair}: turn-0 price != seed price"
 
-    # 72 advances land exactly on the final candle, then hold.
+    # `formal_hours` advances land exactly on the final candle, then hold.
     last = None
-    for expected_turn in range(1, TOTAL_CANDLES):
+    for expected_turn in range(1, formal_hours + 1):
         last = src.advance()
         assert src.turn == expected_turn
-    assert src.turn == 72
+    assert src.turn == formal_hours
     held = src.advance()
-    assert src.turn == 72, "advancing past the final candle should hold, not overrun"
+    assert src.turn == formal_hours, "advancing past the final candle should hold, not overrun"
     assert held == last, "holding past the final candle should return the same snapshot"
 
     # Real return direction/magnitude is preserved through the rebase (checked
     # structurally — this test never prints or asserts which world is which).
     btc_return = last["BTCUSDT"] / snap0["BTCUSDT"]
-    assert Decimal("0.5") < btc_return < Decimal("2.0"), "BTC return over 72h should be a plausible single-digit-percent move, not a rebase bug"
-    print(f"World {world_label}: turn-0 == seed prices (OK), 72 advances reach turn 72 and hold (OK), "
-          f"BTC 72h return = {btc_return:.4f} (plausible, not asserting direction)")
+    assert Decimal("0.3") < btc_return < Decimal("3.0"), f"BTC return over {formal_hours}h should be a plausible move, not a rebase bug"
+    print(f"World {world_label}: {formal_hours} formal hours, turn-0 == seed prices (OK), "
+          f"{formal_hours} advances reach turn {formal_hours} and hold (OK), "
+          f"BTC {formal_hours}h return = {btc_return:.4f} (plausible, not asserting direction)")
 
 
 def test_bad_world_rejected():
@@ -66,5 +68,6 @@ def test_bad_world_rejected():
 if __name__ == "__main__":
     test_world("A")
     test_world("B")
+    test_world("C")
     test_bad_world_rejected()
     print("\nAll ReplayPriceSource unit tests passed.")

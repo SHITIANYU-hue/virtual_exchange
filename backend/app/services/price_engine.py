@@ -27,6 +27,9 @@ SEED_PRICES: dict[str, Decimal] = {
     "BTCUSDT": Decimal("95000.00"),
 }
 
+# Historical default; each world may have a different real candle count now
+# (see ReplayPriceSource, which derives its own length from the CSV it loads).
+# Kept only as a fallback/reference value, not a hard global constraint.
 FORMAL_HOURS = 72
 TOTAL_CANDLES = FORMAL_HOURS + 1  # + 1 pre-interval "previous hour" for Turn 1
 
@@ -84,16 +87,27 @@ class ReplayPriceSource:
 
         raw_closes: dict[str, list[Decimal]] = {}
         opens_by_pair: dict[str, list[int]] = {}
+        expected_candle_count: int | None = None
         for pair in TRADING_PAIRS:
             csv_path = data_dir / f"{pair}.csv"
             with open(csv_path, newline="") as f:
                 rows = list(csv.DictReader(f))
-            if len(rows) != TOTAL_CANDLES:
+            # Candle count is per-world, not a fixed global: derived from the
+            # first pair loaded, then every other pair in the same world must
+            # match it exactly (still fails loudly on a partial/mismatched
+            # download -- just no longer assumes every world is 72h).
+            if expected_candle_count is None:
+                expected_candle_count = len(rows)
+            elif len(rows) != expected_candle_count:
                 raise RuntimeError(
-                    f"replay data for {pair} has {len(rows)} candles, expected {TOTAL_CANDLES}"
+                    f"replay data for {pair} has {len(rows)} candles, expected "
+                    f"{expected_candle_count} (from an earlier pair in the same world)"
                 )
             raw_closes[pair] = [Decimal(r["close"]) for r in rows]
             opens_by_pair[pair] = [int(r["open_time_ms"]) for r in rows]
+
+        self.total_candles = expected_candle_count
+        self.formal_hours = expected_candle_count - 1
 
         reference_pair, reference_opens = next(iter(opens_by_pair.items()))
         for pair, opens in opens_by_pair.items():
@@ -118,17 +132,17 @@ class ReplayPriceSource:
             ]
 
         self.turn = 0  # 0 = pre-interval hour (what Turn 1 sees); N = formal hour N
-        logger.info(f"Replay price source loaded: {len(TRADING_PAIRS)} pairs, {TOTAL_CANDLES} candles each")
+        logger.info(f"Replay price source loaded: {len(TRADING_PAIRS)} pairs, {self.total_candles} candles each ({self.formal_hours} formal hours)")
 
     def snapshot(self) -> dict[str, Decimal]:
         return {pair: self.candles[pair][self.turn] for pair in TRADING_PAIRS}
 
     def advance(self) -> dict[str, Decimal]:
-        if self.turn < FORMAL_HOURS:
+        if self.turn < self.formal_hours:
             self.turn += 1
         else:
             logger.warning(
-                f"Replay price source: already at final candle (turn {FORMAL_HOURS}); holding last price"
+                f"Replay price source: already at final candle (turn {self.formal_hours}); holding last price"
             )
         return self.snapshot()
 

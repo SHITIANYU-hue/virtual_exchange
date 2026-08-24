@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-Download and validate the hourly BTC/ETH/SOL candles for the bull/bear replay
-experiment (see docs/plans/virtual-exchange-hourly-replay-handoff.md).
+Download and validate the hourly BTC/ETH/SOL candles for the bull/bear/sideways
+replay experiment (see docs/plans/virtual-exchange-hourly-replay-handoff.md).
 
-Each world needs 73 hourly candles per asset: 1 pre-interval "previous hour"
-(so Turn 1 has something to show) + 72 formal hours. Validation is strict and
-fails loudly on any gap, duplicate, or cross-asset misalignment — this script
-never falls back to live or seed prices, per the handoff's data-integrity
-requirement.
+Each world needs formal_hours + 1 hourly candles per asset: 1 pre-interval
+"previous hour" (so Turn 1 has something to show) + formal_hours formal hours.
+Formal-hour count is per world, not fixed globally -- see WORLDS below.
+Validation is strict and fails loudly on any gap, duplicate, or cross-asset
+misalignment — this script never falls back to live or seed prices, per the
+handoff's data-integrity requirement.
 
 Usage:
     python3 experiments/scenarios/download_hourly_replay.py
@@ -23,17 +24,19 @@ import httpx
 BINANCE_BASE_URL = "https://data-api.binance.vision"
 PAIRS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
 HOUR_MS = 3_600_000
-FORMAL_HOURS = 72
-TOTAL_CANDLES = FORMAL_HOURS + 1  # + 1 pre-interval "previous hour" for Turn 1
 
 WORLDS = {
-    "bull": datetime(2024, 11, 6, 0, 0, tzinfo=timezone.utc),
-    "bear": datetime(2026, 6, 4, 0, 0, tzinfo=timezone.utc),
+    "bull": (datetime(2024, 11, 6, 0, 0, tzinfo=timezone.utc), 72),
+    "bear": (datetime(2026, 6, 4, 0, 0, tzinfo=timezone.utc), 72),
     # Real consolidation window: BTC/ETH/SOL chopped with meaningful intra-window
-    # range (4.9%/5.7%/9.6%) but small net moves (+0.2%/-2.1%/-6.5%) -- a genuine
-    # sideways regime, unlike the live-price "regular market" runs which turned
-    # out to be near-zero-volatility (see experiments/experiment_analysis).
-    "sideways": datetime(2023, 9, 10, 0, 0, tzinfo=timezone.utc),
+    # range (4.9%/5.7%/9.6%) but small net moves (+0.2%/-2.1%/-6.5%) over the
+    # original 72h -- a genuine sideways regime, unlike the live-price "regular
+    # market" runs which turned out to be near-zero-volatility (see
+    # experiments/experiment_analysis). Extended to 150 formal hours (same
+    # start date) for the longer World C rerun; re-validate sideways character
+    # over the full window before relying on it -- a longer window is not
+    # guaranteed to preserve the same shape.
+    "sideways": (datetime(2023, 9, 10, 0, 0, tzinfo=timezone.utc), 150),
 }
 
 OUT_DIR = Path(__file__).parent / "hourly_replay"
@@ -58,13 +61,13 @@ def fetch_klines(pair: str, start_ms: int, expected_count: int) -> list[dict]:
     return [{"open_time_ms": int(row[0]), "close": row[4]} for row in raw]
 
 
-def validate_single_asset(world: str, pair: str, candles: list[dict], expected_start_ms: int) -> None:
-    if len(candles) != TOTAL_CANDLES:
+def validate_single_asset(world: str, pair: str, candles: list[dict], expected_start_ms: int, total_candles: int) -> None:
+    if len(candles) != total_candles:
         sys.exit(
-            f"FATAL [{world}/{pair}]: expected exactly {TOTAL_CANDLES} candles, "
+            f"FATAL [{world}/{pair}]: expected exactly {total_candles} candles, "
             f"got {len(candles)}. Refusing to write partial/incorrect data."
         )
-    expected_opens = [expected_start_ms + i * HOUR_MS for i in range(TOTAL_CANDLES)]
+    expected_opens = [expected_start_ms + i * HOUR_MS for i in range(total_candles)]
     actual_opens = [c["open_time_ms"] for c in candles]
     if actual_opens != expected_opens:
         first_mismatch = next(
@@ -93,7 +96,8 @@ def validate_cross_asset_alignment(world: str, per_pair_opens: dict[str, list[in
 
 
 def main() -> None:
-    for world, interval_start in WORLDS.items():
+    for world, (interval_start, formal_hours) in WORLDS.items():
+        total_candles = formal_hours + 1
         download_start_ms = int((interval_start - timedelta(hours=1)).timestamp() * 1000)
         world_dir = OUT_DIR / world
         world_dir.mkdir(parents=True, exist_ok=True)
@@ -102,9 +106,9 @@ def main() -> None:
         per_pair_candles = {}
         for pair in PAIRS:
             print(f"Downloading {world}/{pair} "
-                  f"({TOTAL_CANDLES} candles from {interval_start - timedelta(hours=1)}Z)...")
-            candles = fetch_klines(pair, download_start_ms, TOTAL_CANDLES)
-            validate_single_asset(world, pair, candles, download_start_ms)
+                  f"({total_candles} candles from {interval_start - timedelta(hours=1)}Z)...")
+            candles = fetch_klines(pair, download_start_ms, total_candles)
+            validate_single_asset(world, pair, candles, download_start_ms, total_candles)
             per_pair_candles[pair] = candles
             per_pair_opens[pair] = [c["open_time_ms"] for c in candles]
             time.sleep(0.3)  # be polite to the free mirror
@@ -120,7 +124,7 @@ def main() -> None:
                     writer.writerow([c["open_time_ms"], c["close"]])
             print(f"  wrote {out_path} ({len(candles)} rows)")
 
-        print(f"{world}: OK — {TOTAL_CANDLES} validated, aligned candles per asset.\n")
+        print(f"{world}: OK — {total_candles} validated, aligned candles per asset ({formal_hours} formal hours).\n")
 
     print("All worlds downloaded and validated.")
 
